@@ -278,12 +278,12 @@
     .clear-time-overlay {
       position: absolute;
       z-index: 2;
-      top: 51.8%;
+      top: 52.2%;
       left: 50%;
       transform: translate(-50%, -50%);
       color: #fff;
       font-family: "Times New Roman", "Yu Mincho", serif;
-      font-size: clamp(74px, 13vw, 180px);
+      font-size: clamp(48px, 8.5vw, 100px);
       font-weight: 500;
       letter-spacing: .06em;
       white-space: nowrap;
@@ -321,6 +321,12 @@
     }
 
     .audio-unlock.hidden { display: none; }
+
+    body.manual-view .audio-unlock,
+    body.manual-view .status,
+    body.manual-view .error {
+      display: none !important;
+    }
 
     .audio-setup {
       position: fixed;
@@ -710,23 +716,35 @@
     let timerInterval = null;
     let lastResultId = "";
     let lastVideoCommandId = "";
+    let lastStopVideoCommandId = "";
     let lastAudioTestCommandId = "";
     let isPlayingResult = false;
     let requestedBgmMode = "none";
     let requestedBgmVolume = 0.7;
-    let requestedEffectVolume = 1.0;
+    let requestedEffectVolume = 0.8;
     let lastBgmCommandId = "";
     let bgmSuppressed = false;
+
+    // 充電切れ画面の隠し通信
+    let deadScreenTapCount = 0;
+    let deadScreenTapResetTimer = null;
+    let secretVideoPlaying = false;
+    const SECRET_TAP_COUNT = 10;
+    const SECRET_TAP_TIMEOUT_MS = 5000;
+    const SECRET_VIDEO_SRC = "video/seikai1.mp4";
 
     class AudioEngine {
       constructor(files) {
         const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-        this.ctx = AudioContextClass ? new AudioContextClass() : null;
+        this.ctx = AudioContextClass
+          ? new AudioContextClass({ latencyHint: "playback" })
+          : null;
         this.files = files;
         this.buffers = new Map();
         this.statuses = new Map();
         this.effectGain = null;
         this.bgmGain = null;
+        this.masterCompressor = null;
         this.bgmSource = null;
         this.bgmKey = null;
         this.bgmOffset = 0;
@@ -736,24 +754,39 @@
         if (this.ctx) {
           this.effectGain = this.ctx.createGain();
           this.bgmGain = this.ctx.createGain();
-          this.effectGain.connect(this.ctx.destination);
-          this.bgmGain.connect(this.ctx.destination);
-          this.setEffectVolume(1);
+          this.masterCompressor = this.ctx.createDynamicsCompressor();
+
+          // 音割れ防止。大きい音だけ自然に抑える
+          this.masterCompressor.threshold.value = -8;
+          this.masterCompressor.knee.value = 18;
+          this.masterCompressor.ratio.value = 4;
+          this.masterCompressor.attack.value = 0.008;
+          this.masterCompressor.release.value = 0.22;
+
+          this.effectGain.connect(this.masterCompressor);
+          this.bgmGain.connect(this.masterCompressor);
+          this.masterCompressor.connect(this.ctx.destination);
+
+          this.setEffectVolume(.8);
           this.setBgmVolume(.7);
         }
       }
 
       setEffectVolume(value) {
-        const v = Math.max(0, Math.min(2, Number(value) || 0));
+        const v = Math.max(0, Math.min(1, Number(value) || 0));
         if (this.ctx && this.effectGain) {
-          this.effectGain.gain.setValueAtTime(v, this.ctx.currentTime);
+          const now = this.ctx.currentTime;
+          this.effectGain.gain.cancelScheduledValues(now);
+          this.effectGain.gain.setTargetAtTime(v, now, 0.015);
         }
       }
 
       setBgmVolume(value) {
         const v = Math.max(0, Math.min(1, Number(value) || 0));
         if (this.ctx && this.bgmGain) {
-          this.bgmGain.gain.setValueAtTime(v, this.ctx.currentTime);
+          const now = this.ctx.currentTime;
+          this.bgmGain.gain.cancelScheduledValues(now);
+          this.bgmGain.gain.setTargetAtTime(v, now, 0.02);
         }
       }
 
@@ -1027,6 +1060,11 @@
     function showScreen(mode) {
       currentMode = mode;
 
+      if (mode !== "dead") {
+        deadScreenTapCount = 0;
+        clearTimeout(deadScreenTapResetTimer);
+      }
+
       const isBaseScreen = ["dead", "ready", "waiting", "playing"].includes(mode);
       const showTimer = ["ready", "waiting", "playing"].includes(mode);
 
@@ -1036,6 +1074,9 @@
       attentionScreen.classList.toggle("active", mode === "attention");
       successScreen.classList.toggle("active", mode === "success");
       failureScreen.classList.toggle("active", mode === "failure");
+
+      const isManualView = ["attention", "success", "failure"].includes(mode);
+      document.body.classList.toggle("manual-view", isManualView);
 
       const waiting = mode === "waiting";
       const playing = mode === "playing";
@@ -1079,7 +1120,7 @@
 
     async function applyBgmControl(control = {}) {
       requestedBgmVolume = Math.max(0, Math.min(1, Number(control.volume ?? .7)));
-      requestedEffectVolume = Math.max(0, Math.min(2, Number(control.effectVolume ?? 1)));
+      requestedEffectVolume = Math.max(0, Math.min(2, Number(control.effectVolume ?? .8)));
       audio.setBgmVolume(requestedBgmVolume);
       audio.setEffectVolume(requestedEffectVolume);
 
@@ -1144,6 +1185,56 @@
       }
     }
 
+
+    async function playSecretVideo() {
+      if (secretVideoPlaying || currentMode !== "dead") return;
+      secretVideoPlaying = true;
+
+      try {
+        await playEffectSafe("incoming");
+
+        eventVideo.src = SECRET_VIDEO_SRC;
+        eventVideo.load();
+        eventVideo.currentTime = 0;
+        videoOverlay.classList.add("active");
+
+        await eventVideo.play();
+
+        await new Promise(resolve => {
+          eventVideo.addEventListener("ended", resolve, { once: true });
+          eventVideo.addEventListener("error", resolve, { once: true });
+        });
+      } catch (error) {
+        showError(`隠し通信の再生に失敗しました：${error.message}`);
+      } finally {
+        eventVideo.pause();
+        eventVideo.removeAttribute("src");
+        eventVideo.load();
+        videoOverlay.classList.remove("active");
+        secretVideoPlaying = false;
+        deadScreenTapCount = 0;
+      }
+    }
+
+    function registerDeadScreenTap() {
+      if (currentMode !== "dead" || secretVideoPlaying) return;
+
+      deadScreenTapCount += 1;
+      clearTimeout(deadScreenTapResetTimer);
+
+      deadScreenTapResetTimer = setTimeout(() => {
+        deadScreenTapCount = 0;
+      }, SECRET_TAP_TIMEOUT_MS);
+
+      if (deadScreenTapCount >= SECRET_TAP_COUNT) {
+        clearTimeout(deadScreenTapResetTimer);
+        deadScreenTapCount = 0;
+        playSecretVideo();
+      }
+    }
+
+    deadScreen.addEventListener("pointerup", registerDeadScreenTap);
+
     async function playVideoCommand(command) {
       if (!command?.id || command.id === lastVideoCommandId) return;
       lastVideoCommandId = command.id;
@@ -1169,6 +1260,19 @@
         videoOverlay.classList.remove("active");
         await update(roomRef, { videoCommand: null });
       }
+    }
+
+
+    function stopVideoPlayback(command) {
+      if (!command?.id || command.id === lastStopVideoCommandId) return;
+      lastStopVideoCommandId = command.id;
+
+      eventVideo.pause();
+      eventVideo.removeAttribute("src");
+      eventVideo.load();
+      videoOverlay.classList.remove("active");
+
+      update(roomRef, { stopVideoCommand: null }).catch(console.error);
     }
 
     async function runAudioTest(command) {
@@ -1288,12 +1392,13 @@
       applyBgmControl(state.bgmControl || {
         mode: "none",
         volume: .7,
-        effectVolume: 1
+        effectVolume: .8
       });
 
       if (!timerInterval) timerInterval = setInterval(updateTimer, 250);
       if (state.result) playResult(state.result);
       if (state.videoCommand) playVideoCommand(state.videoCommand);
+      if (state.stopVideoCommand) stopVideoPlayback(state.stopVideoCommand);
       if (state.audioTestCommand) runAudioTest(state.audioTestCommand);
 
       status.textContent =
