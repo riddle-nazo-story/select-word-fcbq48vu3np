@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>SELECT WORD | DISPLAY</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #050505;
+      --fg: #f5f5f5;
+      --muted: #8b8b8b;
+      --line: #2a2a2a;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: "Noto Sans JP", system-ui, sans-serif;
+    }
+
+    body {
+      display: grid;
+      place-items: center;
+    }
+
+    .screen {
+      display: none;
+      width: 100%;
+      height: 100%;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      padding: 5vw;
+      text-align: center;
+    }
+
+    .screen.active {
+      display: flex;
+    }
+
+    /* 充電切れ */
+    .battery-wrap {
+      position: relative;
+      width: min(42vw, 360px);
+      aspect-ratio: 2 / 1;
+      border: min(1.6vw, 12px) solid var(--fg);
+      border-radius: min(3vw, 24px);
+    }
+
+    .battery-wrap::after {
+      content: "";
+      position: absolute;
+      top: 28%;
+      right: min(-5vw, -32px);
+      width: min(4vw, 28px);
+      height: 44%;
+      background: var(--fg);
+      border-radius: 0 8px 8px 0;
+    }
+
+    .battery-low {
+      position: absolute;
+      left: 7%;
+      top: 10%;
+      bottom: 10%;
+      width: 12%;
+      border-radius: 8px;
+      background: #cfcfcf;
+      animation: blink 1.2s infinite;
+    }
+
+    .dead-text {
+      margin-top: 4vh;
+      color: var(--muted);
+      font-size: clamp(18px, 3vw, 34px);
+      letter-spacing: 0.12em;
+    }
+
+    @keyframes blink {
+      0%, 45% { opacity: 1; }
+      50%, 100% { opacity: 0.2; }
+    }
+
+    /* 判定画面 */
+    .judge-label {
+      margin-bottom: 3vh;
+      color: var(--muted);
+      font-size: clamp(15px, 2vw, 24px);
+      letter-spacing: 0.25em;
+    }
+
+    .judge-button {
+      width: min(72vw, 720px);
+      min-height: min(28vh, 220px);
+      border: 3px solid var(--fg);
+      border-radius: 28px;
+      background: transparent;
+      color: var(--fg);
+      font-size: clamp(42px, 8vw, 92px);
+      font-weight: 700;
+      letter-spacing: 0.16em;
+      cursor: default;
+      box-shadow: 0 0 0 1px var(--line) inset;
+    }
+
+    .status {
+      position: fixed;
+      right: 16px;
+      bottom: 12px;
+      color: #555;
+      font-size: 12px;
+    }
+
+    .error {
+      position: fixed;
+      inset: auto 20px 20px;
+      display: none;
+      padding: 12px 16px;
+      border: 1px solid #633;
+      border-radius: 10px;
+      background: #211;
+      color: #faa;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <main id="deadScreen" class="screen active" aria-label="充電切れ画面">
+    <div class="battery-wrap">
+      <div class="battery-low"></div>
+    </div>
+    <div class="dead-text">BATTERY EMPTY</div>
+  </main>
+
+  <main id="judgeScreen" class="screen" aria-label="判定画面">
+    <div class="judge-label">SELECT WORD SYSTEM</div>
+    <button class="judge-button" type="button" tabindex="-1">判 定</button>
+  </main>
+
+  <div id="status" class="status">接続中...</div>
+  <div id="error" class="error"></div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
+    import {
+      getDatabase,
+      ref,
+      onValue
+    } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-database.js";
+
+    const firebaseConfig = {
+      apiKey: "ここにAPI_KEY",
+      authDomain: "ここにPROJECT_ID.firebaseapp.com",
+      databaseURL: "ここにREALTIME_DATABASE_URL",
+      projectId: "ここにPROJECT_ID",
+      storageBucket: "ここにPROJECT_ID.firebasestorage.app",
+      messagingSenderId: "ここにSENDER_ID",
+      appId: "ここにAPP_ID"
+    };
+
+    const params = new URLSearchParams(location.search);
+    const roomId = params.get("room") || "main";
+
+    const deadScreen = document.getElementById("deadScreen");
+    const judgeScreen = document.getElementById("judgeScreen");
+    const status = document.getElementById("status");
+    const errorBox = document.getElementById("error");
+
+    function showScreen(name) {
+      deadScreen.classList.toggle("active", name === "dead");
+      judgeScreen.classList.toggle("active", name === "judge");
+    }
+
+    function showError(message) {
+      errorBox.textContent = message;
+      errorBox.style.display = "block";
+      status.textContent = "接続エラー";
+    }
+
+    try {
+      const app = initializeApp(firebaseConfig);
+      const db = getDatabase(app);
+      const stateRef = ref(db, `selectWord/rooms/${roomId}/screen`);
+
+      onValue(
+        stateRef,
+        (snapshot) => {
+          const screen = snapshot.val() || "dead";
+          showScreen(screen === "judge" ? "judge" : "dead");
+          status.textContent = `ROOM: ${roomId} / ${screen}`;
+          errorBox.style.display = "none";
+        },
+        (error) => {
+          console.error(error);
+          showError("Firebaseへの接続に失敗しました。設定とルールを確認してください。");
+        }
+      );
+    } catch (error) {
+      console.error(error);
+      showError("Firebaseの設定が未入力、または正しくありません。");
+    }
+  </script>
+</body>
+</html>
