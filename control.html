@@ -179,7 +179,6 @@ onValue(roomRef,snapshot=>{
 
 document.getElementById("startGame").addEventListener("click",async()=>{
   await update(roomRef,{
-    mode:"ready",
     timer:{status:"running",startedAt:Date.now(),durationSeconds:GAME_SECONDS,remainingSeconds:GAME_SECONDS}
   });
 });
