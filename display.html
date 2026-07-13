@@ -628,7 +628,6 @@
       pausedBgmMode = "none";
 
       if (requestedBgmMode === "none") return;
-      if (!currentTimerState || currentTimerState.status !== "running") return;
 
       playRequestedBgm(false);
     }
@@ -680,7 +679,6 @@
       }
 
       if (bgmSuppressed) return;
-      if (!currentTimerState || currentTimerState.status !== "running") return;
 
       const expectedKey = requestedBgmMode === "last5" ? "bgm5" : "bgm";
       const shouldReset =
@@ -850,14 +848,6 @@
         eventVideo.removeAttribute("src");
         eventVideo.load();
         videoOverlay.classList.remove("active");
-      }
-
-      if (currentTimerState.status === "idle" || currentTimerState.status === "ended") {
-        bgmSuppressed = false;
-        stopBgm(false);
-      } else if (currentTimerState.status === "paused") {
-        bgmSuppressed = false;
-        stopBgm(false);
       }
 
       status.textContent = `ROOM: ${roomId} / ${mode}`;
