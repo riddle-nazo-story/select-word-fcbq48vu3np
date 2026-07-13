@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SELECT WORD | CONTROL</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0a0a0a;
+      --panel: #141414;
+      --fg: #f5f5f5;
+      --muted: #999;
+      --line: #2c2c2c;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding: 24px;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: "Noto Sans JP", system-ui, sans-serif;
+    }
+
+    .wrap {
+      width: min(100%, 620px);
+      margin: 0 auto;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 24px;
+      letter-spacing: 0.08em;
+    }
+
+    .sub {
+      margin: 0 0 24px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .panel {
+      padding: 20px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: var(--panel);
+    }
+
+    .room {
+      margin-bottom: 18px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .buttons {
+      display: grid;
+      gap: 14px;
+    }
+
+    button {
+      width: 100%;
+      min-height: 78px;
+      border: 1px solid #555;
+      border-radius: 14px;
+      background: #1d1d1d;
+      color: var(--fg);
+      font-size: 20px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    button:active {
+      transform: scale(0.985);
+    }
+
+    button.primary {
+      border-color: #ddd;
+      background: #f2f2f2;
+      color: #080808;
+    }
+
+    .current {
+      margin-top: 18px;
+      padding-top: 18px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .message {
+      min-height: 1.6em;
+      margin-top: 14px;
+      font-size: 14px;
+    }
+
+    .ok { color: #aef0bf; }
+    .ng { color: #ffaaaa; }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <h1>SELECT WORD CONTROL</h1>
+    <p class="sub">タブレット表示を遠隔操作します。</p>
+
+    <section class="panel">
+      <div id="roomText" class="room"></div>
+
+      <div class="buttons">
+        <button id="showDead">充電切れ画面を表示</button>
+        <button id="showJudge" class="primary">判定ボタンを表示</button>
+      </div>
+
+      <div id="current" class="current">現在の表示：確認中...</div>
+      <div id="message" class="message"></div>
+    </section>
+  </main>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
+    import {
+      getDatabase,
+      ref,
+      set,
+      onValue
+    } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-database.js";
+
+    const firebaseConfig = {
+  apiKey: "AIzaSyA-f7Dplo95j3NYBCXHSxEBGhFXgAa35lU",
+  authDomain: "select-word-01.firebaseapp.com",
+  databaseURL: "https://select-word-01-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "select-word-01",
+  storageBucket: "select-word-01.firebasestorage.app",
+  messagingSenderId: "1014781061586",
+  appId: "1:1014781061586:web:3ed1752379994818d5c00b"
+};
+
+    const params = new URLSearchParams(location.search);
+    const roomId = params.get("room") || "main";
+
+    const roomText = document.getElementById("roomText");
+    const current = document.getElementById("current");
+    const message = document.getElementById("message");
+    const showDead = document.getElementById("showDead");
+    const showJudge = document.getElementById("showJudge");
+
+    roomText.textContent = `操作ルーム：${roomId}`;
+
+    function setMessage(text, isError = false) {
+      message.textContent = text;
+      message.className = `message ${isError ? "ng" : "ok"}`;
+    }
+
+    try {
+      const app = initializeApp(firebaseConfig);
+      const db = getDatabase(app);
+      const stateRef = ref(db, `selectWord/rooms/${roomId}/screen`);
+
+      onValue(stateRef, (snapshot) => {
+        const value = snapshot.val() || "dead";
+        current.textContent =
+          value === "judge"
+            ? "現在の表示：判定ボタン"
+            : "現在の表示：充電切れ";
+      });
+
+      async function changeScreen(screen) {
+        try {
+          await set(stateRef, screen);
+          setMessage("表示を切り替えました。");
+        } catch (error) {
+          console.error(error);
+          setMessage("切り替えに失敗しました。Firebaseの設定を確認してください。", true);
+        }
+      }
+
+      showDead.addEventListener("click", () => changeScreen("dead"));
+      showJudge.addEventListener("click", () => changeScreen("judge"));
+    } catch (error) {
+      console.error(error);
+      setMessage("Firebaseの設定が未入力、または正しくありません。", true);
+    }
+  </script>
+</body>
+</html>
