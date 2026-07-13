@@ -80,10 +80,10 @@
     </div>
 
     <div style="margin-top:16px">
-      <label for="effectVolume">効果音・動物音声の音量</label>
+      <label for="effectVolume">効果音・動物音声の音量（音割れ防止）</label>
       <div class="volume-row">
-        <input id="effectVolume" type="range" min="0" max="200" value="100">
-        <div id="effectVolumeValue" class="volume-value">100%</div>
+        <input id="effectVolume" type="range" min="0" max="100" value="80">
+        <div id="effectVolumeValue" class="volume-value">80%</div>
       </div>
     </div>
 
@@ -116,7 +116,29 @@
     <div id="audioHealth" class="audio-health">タブレットの音声状態：未確認</div>
   </section>
 
+  
   <section class="panel">
+    <h2 class="panel-title">動画通信</h2>
+
+    <label for="videoSelect">再生する動画</label>
+    <select id="videoSelect">
+      <option value="video/event.mp4">event.mp4</option>
+      <option value="video/message1.mp4">message1.mp4</option>
+      <option value="video/message2.mp4">message2.mp4</option>
+      <option value="video/ending.mp4">ending.mp4</option>
+    </select>
+
+    <div class="grid2" style="margin-top:12px">
+      <button id="playSelectedVideo" class="primary">選択した動画を再生</button>
+      <button id="stopVideo" class="danger">動画を停止</button>
+    </div>
+
+    <p class="note" style="margin-top:12px">
+      動画は <code>video</code> フォルダに配置してください。
+    </p>
+  </section>
+
+<section class="panel">
     <h2 class="panel-title">画面切り替え（すべて手動）</h2>
     <div class="grid2">
       <button id="showAttention" class="primary">画面に注目してください</button>
@@ -249,9 +271,9 @@ onValue(roomRef,snapshot=>{
   document.getElementById("pauseTimer").disabled = timerStatus !== "running";
   document.getElementById("resumeTimer").disabled = timerStatus !== "paused";
 
-  const bgmControl = state.bgmControl || {mode:"none", volume:0.7, effectVolume:1};
+  const bgmControl = state.bgmControl || {mode:"none", volume:0.7, effectVolume:.8};
   const volumePercent = Math.round((bgmControl.volume ?? 0.7) * 100);
-  const effectPercent = Math.round((bgmControl.effectVolume ?? 1) * 100);
+  const effectPercent = Math.round((bgmControl.effectVolume ?? .8) * 100);
 
   if (document.activeElement !== document.getElementById("bgmVolume")) {
     document.getElementById("bgmVolume").value = volumePercent;
@@ -341,7 +363,7 @@ document.getElementById("resetGame").addEventListener("click",async()=>{
     bgmControl:{
       mode:"none",
       volume:0.7,
-      effectVolume:1,
+      effectVolume:.8,
       commandId:`${Date.now()}-${Math.random().toString(36).slice(2)}`
     }
   });
@@ -424,7 +446,7 @@ document.getElementById("bgmVolume").addEventListener("change", async (event) =>
   const volume = Number(event.target.value) / 100;
   await update(roomRef, {
     bgmControl: {
-      ...(state.bgmControl || {mode:"none", effectVolume:1}),
+      ...(state.bgmControl || {mode:"none", effectVolume:.8}),
       volume
     }
   });
@@ -510,7 +532,7 @@ async function submitJudgement(){
         recordedAt:Date.now()
       };
       payload.bgmControl = {
-        ...(state.bgmControl || {volume:.7,effectVolume:1}),
+        ...(state.bgmControl || {volume:.7,effectVolume:.8}),
         mode:"none",
         commandId:`${Date.now()}-clear-stop`
       };
@@ -526,6 +548,26 @@ async function submitJudgement(){
 }
 judgeSubmit.addEventListener("click",submitJudgement);
 wordInput.addEventListener("keydown",e=>{if(e.key==="Enter")submitJudgement()});
+
+document.getElementById("playSelectedVideo").addEventListener("click", async () => {
+  const src = document.getElementById("videoSelect").value;
+  await update(roomRef, {
+    videoCommand: {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      src
+    }
+  });
+});
+
+document.getElementById("stopVideo").addEventListener("click", async () => {
+  await update(roomRef, {
+    videoCommand: null,
+    stopVideoCommand: {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    }
+  });
+});
+
 </script>
 </body>
 </html>
