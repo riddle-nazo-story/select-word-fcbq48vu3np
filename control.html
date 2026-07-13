@@ -38,6 +38,8 @@
     input[type="range"]{height:auto;padding:0;border:none;background:transparent}
     .volume-value{text-align:center;font-family:ui-monospace,monospace;font-size:16px;color:#ddd}
     .bgm-status{margin-top:12px;color:var(--muted);font-size:14px}
+    .audio-health{margin-top:12px;padding:12px;border:1px solid #333;border-radius:10px;background:#0d0d0d;font-size:13px;line-height:1.7}
+    select{width:100%;height:54px;padding:0 12px;border:1px solid #444;border-radius:12px;background:#0d0d0d;color:white;font:inherit}
   </style>
 </head>
 <body>
@@ -77,7 +79,41 @@
       </div>
     </div>
 
+    <div style="margin-top:16px">
+      <label for="effectVolume">効果音・動物音声の音量</label>
+      <div class="volume-row">
+        <input id="effectVolume" type="range" min="0" max="200" value="100">
+        <div id="effectVolumeValue" class="volume-value">100%</div>
+      </div>
+    </div>
+
     <div id="bgmStatus" class="bgm-status">現在：停止中</div>
+
+    <div style="margin-top:18px">
+      <label for="audioTestSelect">タブレットで音声テスト</label>
+      <div class="row">
+        <select id="audioTestSelect">
+          <option value="tone">内蔵テスト音（MP3不要）</option>
+          <option value="button">button.mp3</option>
+          <option value="correct">correct.mp3</option>
+          <option value="incorrect">incorrect.mp3</option>
+          <option value="human">human.mp3</option>
+          <option value="sheep">sheep.mp3</option>
+          <option value="dog">dog.mp3</option>
+          <option value="cat">cat.mp3</option>
+          <option value="horse">horse.mp3</option>
+          <option value="cow">cow.mp3</option>
+          <option value="crow">crow.mp3</option>
+          <option value="tiger">tiger.mp3</option>
+          <option value="incoming">incoming.mp3</option>
+          <option value="bgm">bgm.mp3（3秒）</option>
+          <option value="bgm5">bgm_last5.mp3（3秒）</option>
+        </select>
+        <button id="sendAudioTest">テスト送信</button>
+      </div>
+    </div>
+
+    <div id="audioHealth" class="audio-health">タブレットの音声状態：未確認</div>
   </section>
 
   <section class="panel">
@@ -211,8 +247,9 @@ onValue(roomRef,snapshot=>{
   document.getElementById("pauseTimer").disabled = timerStatus !== "running";
   document.getElementById("resumeTimer").disabled = timerStatus !== "paused";
 
-  const bgmControl = state.bgmControl || {mode:"none", volume:0.7};
+  const bgmControl = state.bgmControl || {mode:"none", volume:0.7, effectVolume:1};
   const volumePercent = Math.round((bgmControl.volume ?? 0.7) * 100);
+  const effectPercent = Math.round((bgmControl.effectVolume ?? 1) * 100);
 
   if (document.activeElement !== document.getElementById("bgmVolume")) {
     document.getElementById("bgmVolume").value = volumePercent;
@@ -220,7 +257,21 @@ onValue(roomRef,snapshot=>{
   }
 
   document.getElementById("bgmStatus").textContent =
-    `現在：${bgmLabel(bgmControl.mode)} / 音量 ${volumePercent}%`;
+    `現在：${bgmLabel(bgmControl.mode)} / BGM ${volumePercent}% / 効果音 ${effectPercent}%`;
+
+  if (document.activeElement !== document.getElementById("effectVolume")) {
+    document.getElementById("effectVolume").value = effectPercent;
+    document.getElementById("effectVolumeValue").textContent = `${effectPercent}%`;
+  }
+
+  const device = state.audioDevice;
+  const testResult = state.audioTestResult;
+  document.getElementById("audioHealth").innerHTML = device
+    ? `タブレット音声：<strong>${device.ready ? "準備完了" : "ファイル不足"}</strong><br>` +
+      `AudioContext：${device.contextState}<br>` +
+      `読込済み：${device.loadedCount}/${device.totalCount}` +
+      (testResult ? `<br>直近テスト：${testResult.ok ? "成功" : "失敗"}（${testResult.key}）${testResult.message ? " / "+testResult.message : ""}` : "")
+    : "タブレットの音声状態：タブレット側でセットアップ未実行";
 
   if(state.mode==="waiting")setTimeout(()=>wordInput.focus(),50);
   updateTimerReadout();
@@ -282,6 +333,7 @@ document.getElementById("resetGame").addEventListener("click",async()=>{
     bgmControl:{
       mode:"none",
       volume:0.7,
+      effectVolume:1,
       commandId:`${Date.now()}-${Math.random().toString(36).slice(2)}`
     }
   });
@@ -301,6 +353,7 @@ document.getElementById("playNormalBgm").addEventListener("click", async () => {
     bgmControl: {
       mode: "normal",
       volume,
+      effectVolume: Number(document.getElementById("effectVolume").value) / 100,
       commandId: `${Date.now()}-${Math.random().toString(36).slice(2)}`
     }
   });
@@ -312,6 +365,7 @@ document.getElementById("playLast5Bgm").addEventListener("click", async () => {
     bgmControl: {
       mode: "last5",
       volume,
+      effectVolume: Number(document.getElementById("effectVolume").value) / 100,
       commandId: `${Date.now()}-${Math.random().toString(36).slice(2)}`
     }
   });
@@ -323,6 +377,7 @@ document.getElementById("stopBgm").addEventListener("click", async () => {
     bgmControl: {
       mode: "none",
       volume,
+      effectVolume: Number(document.getElementById("effectVolume").value) / 100,
       commandId: `${Date.now()}-${Math.random().toString(36).slice(2)}`
     }
   });
@@ -337,6 +392,7 @@ document.getElementById("restartBgm").addEventListener("click", async () => {
     bgmControl: {
       mode: currentMode,
       volume,
+      effectVolume: Number(document.getElementById("effectVolume").value) / 100,
       restart: true,
       commandId: `${Date.now()}-${Math.random().toString(36).slice(2)}`
     }
@@ -351,8 +407,32 @@ document.getElementById("bgmVolume").addEventListener("change", async (event) =>
   const volume = Number(event.target.value) / 100;
   await update(roomRef, {
     bgmControl: {
-      ...(state.bgmControl || {mode:"none"}),
+      ...(state.bgmControl || {mode:"none", effectVolume:1}),
       volume
+    }
+  });
+});
+
+document.getElementById("effectVolume").addEventListener("input", event => {
+  document.getElementById("effectVolumeValue").textContent = `${event.target.value}%`;
+});
+
+document.getElementById("effectVolume").addEventListener("change", async event => {
+  const effectVolume = Number(event.target.value) / 100;
+  await update(roomRef, {
+    bgmControl: {
+      ...(state.bgmControl || {mode:"none", volume:.7}),
+      effectVolume
+    }
+  });
+});
+
+document.getElementById("sendAudioTest").addEventListener("click", async () => {
+  const key = document.getElementById("audioTestSelect").value;
+  await update(roomRef, {
+    audioTestCommand: {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      key
     }
   });
 });
