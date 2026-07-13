@@ -34,6 +34,10 @@
     .message{min-height:1.5em;margin-top:12px;font-size:14px}
     .ok{color:#aef0bf}.ng{color:#ffaaaa}
     .timer-readout{margin-bottom:14px;font-family:ui-monospace,monospace;font-size:38px;font-weight:900;letter-spacing:.08em}
+    .volume-row{display:grid;grid-template-columns:1fr 72px;gap:12px;align-items:center}
+    input[type="range"]{height:auto;padding:0;border:none;background:transparent}
+    .volume-value{text-align:center;font-family:ui-monospace,monospace;font-size:16px;color:#ddd}
+    .bgm-status{margin-top:12px;color:var(--muted);font-size:14px}
   </style>
 </head>
 <body>
@@ -54,6 +58,26 @@
       <button id="showReady">判定ボタン表示</button>
     </div>
     <div id="current" class="current" style="margin-top:14px">現在の状態：確認中…</div>
+  </section>
+
+  <section class="panel">
+    <h2 class="panel-title">ゲーム中BGM</h2>
+    <div class="grid2">
+      <button id="playNormalBgm" class="primary">通常BGMを流す</button>
+      <button id="playLast5Bgm">ラスト5分BGMを流す</button>
+      <button id="stopBgm" class="danger">BGMを停止</button>
+      <button id="restartBgm">現在のBGMを最初から</button>
+    </div>
+
+    <div style="margin-top:16px">
+      <label for="bgmVolume">BGM音量</label>
+      <div class="volume-row">
+        <input id="bgmVolume" type="range" min="0" max="100" value="70">
+        <div id="bgmVolumeValue" class="volume-value">70%</div>
+      </div>
+    </div>
+
+    <div id="bgmStatus" class="bgm-status">現在：停止中</div>
   </section>
 
   <section class="panel">
@@ -155,6 +179,14 @@ function setMessage(el,text,error=false){el.textContent=text;el.className=`messa
 function modeLabel(mode){
   return {dead:"充電切れ画面",ready:"判定ボタン待機",waiting:"言葉の入力待ち",playing:"音声再生中",broken:"システム崩壊"}[mode]||mode||"未設定";
 }
+
+function bgmLabel(mode){
+  return {
+    none:"停止中",
+    normal:"通常BGM",
+    last5:"ラスト5分BGM"
+  }[mode] || "停止中";
+}
 function fmt(seconds){
   const s=Math.max(0,Math.ceil(seconds));
   return `${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;
@@ -178,6 +210,17 @@ onValue(roomRef,snapshot=>{
   const timerStatus = state.timer?.status || "idle";
   document.getElementById("pauseTimer").disabled = timerStatus !== "running";
   document.getElementById("resumeTimer").disabled = timerStatus !== "paused";
+
+  const bgmControl = state.bgmControl || {mode:"none", volume:0.7};
+  const volumePercent = Math.round((bgmControl.volume ?? 0.7) * 100);
+
+  if (document.activeElement !== document.getElementById("bgmVolume")) {
+    document.getElementById("bgmVolume").value = volumePercent;
+    document.getElementById("bgmVolumeValue").textContent = `${volumePercent}%`;
+  }
+
+  document.getElementById("bgmStatus").textContent =
+    `現在：${bgmLabel(bgmControl.mode)} / 音量 ${volumePercent}%`;
 
   if(state.mode==="waiting")setTimeout(()=>wordInput.focus(),50);
   updateTimerReadout();
@@ -235,7 +278,12 @@ document.getElementById("resetGame").addEventListener("click",async()=>{
     },
     videoCommand:null,
     result:null,
-    requestAt:null
+    requestAt:null,
+    bgmControl:{
+      mode:"none",
+      volume:0.7,
+      commandId:`${Date.now()}-${Math.random().toString(36).slice(2)}`
+    }
   });
   document.getElementById("videoInput").value="video/event.mp4";
   wordInput.value="";
@@ -246,6 +294,68 @@ document.getElementById("breakSystem").addEventListener("click",()=>update(roomR
 document.getElementById("showReady").addEventListener("click",()=>update(roomRef,{mode:"ready"}));
 document.getElementById("showReady2").addEventListener("click",()=>update(roomRef,{mode:"ready"}));
 document.getElementById("showDead").addEventListener("click",()=>update(roomRef,{mode:"dead",result:null,requestAt:null}));
+
+document.getElementById("playNormalBgm").addEventListener("click", async () => {
+  const volume = Number(document.getElementById("bgmVolume").value) / 100;
+  await update(roomRef, {
+    bgmControl: {
+      mode: "normal",
+      volume,
+      commandId: `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    }
+  });
+});
+
+document.getElementById("playLast5Bgm").addEventListener("click", async () => {
+  const volume = Number(document.getElementById("bgmVolume").value) / 100;
+  await update(roomRef, {
+    bgmControl: {
+      mode: "last5",
+      volume,
+      commandId: `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    }
+  });
+});
+
+document.getElementById("stopBgm").addEventListener("click", async () => {
+  const volume = Number(document.getElementById("bgmVolume").value) / 100;
+  await update(roomRef, {
+    bgmControl: {
+      mode: "none",
+      volume,
+      commandId: `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    }
+  });
+});
+
+document.getElementById("restartBgm").addEventListener("click", async () => {
+  const currentMode = state.bgmControl?.mode || "none";
+  if (currentMode === "none") return;
+
+  const volume = Number(document.getElementById("bgmVolume").value) / 100;
+  await update(roomRef, {
+    bgmControl: {
+      mode: currentMode,
+      volume,
+      restart: true,
+      commandId: `${Date.now()}-${Math.random().toString(36).slice(2)}`
+    }
+  });
+});
+
+document.getElementById("bgmVolume").addEventListener("input", (event) => {
+  document.getElementById("bgmVolumeValue").textContent = `${event.target.value}%`;
+});
+
+document.getElementById("bgmVolume").addEventListener("change", async (event) => {
+  const volume = Number(event.target.value) / 100;
+  await update(roomRef, {
+    bgmControl: {
+      ...(state.bgmControl || {mode:"none"}),
+      volume
+    }
+  });
+});
 
 document.getElementById("playVideo").addEventListener("click",async()=>{
   const src=document.getElementById("videoInput").value.trim()||"video/event.mp4";
