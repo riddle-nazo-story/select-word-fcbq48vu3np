@@ -481,6 +481,9 @@
     let bgmMode = "none";
     let pausedBgmMode = "none";
     let bgmSuppressed = false;
+    let requestedBgmMode = "none";
+    let requestedBgmVolume = 0.7;
+    let lastBgmCommandId = "";
 
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     const audioContext = AudioContextClass ? new AudioContextClass() : null;
@@ -622,50 +625,72 @@
 
     function resumeBgmAfterJudgement() {
       bgmSuppressed = false;
-
-      if (!currentTimerState || currentTimerState.status !== "running") {
-        pausedBgmMode = "none";
-        return;
-      }
-
-      const elapsed = Math.floor((Date.now() - currentTimerState.startedAt) / 1000);
-      const duration = currentTimerState.durationSeconds || GAME_SECONDS;
-      const remaining = Math.max(0, duration - elapsed);
-
-      if (remaining <= 0) {
-        stopBgm(true);
-        return;
-      }
-
-      const targetMode = remaining <= 300 ? "last5" : "normal";
-      const targetAudio = targetMode === "last5" ? audioCache.bgm5 : audioCache.bgm;
-
-      // 判定中に残り5分をまたいだ場合は、残り5分BGMを最初から再生
-      if (pausedBgmMode !== targetMode) {
-        stopBgm(true);
-      }
-
-      bgmMode = targetMode;
       pausedBgmMode = "none";
-      targetAudio.play().catch(() => {
-        showError(targetMode === "last5"
+
+      if (requestedBgmMode === "none") return;
+      if (!currentTimerState || currentTimerState.status !== "running") return;
+
+      playRequestedBgm(false);
+    }
+
+    function setBgmVolume(volume) {
+      requestedBgmVolume = Math.max(0, Math.min(1, Number(volume) || 0));
+      audioCache.bgm.volume = requestedBgmVolume;
+      audioCache.bgm5.volume = requestedBgmVolume;
+    }
+
+    function playRequestedBgm(resetPosition = false) {
+      if (bgmSuppressed || requestedBgmMode === "none") return;
+
+      const key = requestedBgmMode === "last5" ? "bgm5" : "bgm";
+      const otherKey = key === "bgm" ? "bgm5" : "bgm";
+
+      audioCache[otherKey].pause();
+
+      if (resetPosition) {
+        audioCache[key].currentTime = 0;
+      }
+
+      audioCache[key].volume = requestedBgmVolume;
+      audioCache[key].play().catch(() => {
+        showError(key === "bgm5"
           ? "bgm_last5.mp3 を再生できませんでした。"
           : "bgm.mp3 を再生できませんでした。");
       });
+
+      bgmMode = requestedBgmMode;
     }
 
-    function setBgm(mode) {
+    function applyBgmControl(bgmControl = {}) {
+      const commandChanged =
+        bgmControl.commandId &&
+        bgmControl.commandId !== lastBgmCommandId;
+
+      if (commandChanged) {
+        lastBgmCommandId = bgmControl.commandId;
+      }
+
+      requestedBgmMode = bgmControl.mode || "none";
+      setBgmVolume(bgmControl.volume ?? 0.7);
+
+      if (requestedBgmMode === "none") {
+        stopBgm(false);
+        bgmMode = "none";
+        return;
+      }
+
       if (bgmSuppressed) return;
-      if (bgmMode === mode && !audioCache[mode === "normal" ? "bgm" : "bgm5"].paused) return;
+      if (!currentTimerState || currentTimerState.status !== "running") return;
 
-      stopBgm(true);
+      const expectedKey = requestedBgmMode === "last5" ? "bgm5" : "bgm";
+      const shouldReset =
+        bgmMode !== requestedBgmMode ||
+        (commandChanged && bgmControl.restart === true);
 
-      if (mode === "normal") {
-        audioCache.bgm.play().catch(() => showError("bgm.mp3 を再生できませんでした。"));
-        bgmMode = "normal";
-      } else if (mode === "last5") {
-        audioCache.bgm5.play().catch(() => showError("bgm_last5.mp3 を再生できませんでした。"));
-        bgmMode = "last5";
+      playRequestedBgm(shouldReset);
+
+      if (audioCache[expectedKey].paused) {
+        playRequestedBgm(false);
       }
     }
 
@@ -768,10 +793,6 @@
           },
           mode: "broken"
         }).catch(console.error);
-      } else if (remaining <= 300) {
-        setBgm("last5");
-      } else {
-        setBgm("normal");
       }
     }
 
@@ -817,6 +838,7 @@
 
       currentTimerState = state.timer || { status: "idle", remainingSeconds: GAME_SECONDS };
       updateTimer();
+      applyBgmControl(state.bgmControl || { mode: "none", volume: 0.7 });
 
       if (!timerInterval) timerInterval = setInterval(updateTimer, 250);
 
@@ -832,7 +854,7 @@
 
       if (currentTimerState.status === "idle" || currentTimerState.status === "ended") {
         bgmSuppressed = false;
-        stopBgm(true);
+        stopBgm(false);
       } else if (currentTimerState.status === "paused") {
         bgmSuppressed = false;
         stopBgm(false);
