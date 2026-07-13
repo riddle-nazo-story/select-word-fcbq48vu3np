@@ -447,6 +447,7 @@
       cow: "audio/cow.mp3",
       crow: "audio/crow.mp3",
       tiger: "audio/tiger.mp3",
+      button: "audio/button.mp3",
       incoming: "audio/incoming.mp3",
       bgm: "audio/bgm.mp3",
       bgm5: "audio/bgm_last5.mp3"
@@ -478,16 +479,48 @@
     let timerInterval = null;
     let currentTimerState = null;
     let bgmMode = "none";
+    let pausedBgmMode = "none";
+    let bgmSuppressed = false;
+
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    const audioContext = AudioContextClass ? new AudioContextClass() : null;
+    const effectGain = audioContext ? audioContext.createGain() : null;
+
+    // 正解・不正解・動物音声・ボタン音などを3倍に増幅
+    if (effectGain) {
+      effectGain.gain.value = 3;
+      effectGain.connect(audioContext.destination);
+    }
 
     const audioCache = {};
+    const mediaSources = {};
+
     for (const [key, src] of Object.entries(AUDIO_FILES)) {
       const audio = new Audio(new URL(src, location.href).href);
       audio.preload = "auto";
-      if (key === "bgm" || key === "bgm5") audio.loop = true;
+
+      if (key === "bgm" || key === "bgm5") {
+        audio.loop = true;
+      } else if (audioContext && effectGain) {
+        try {
+          const source = audioContext.createMediaElementSource(audio);
+          source.connect(effectGain);
+          mediaSources[key] = source;
+        } catch (error) {
+          console.warn(`音声増幅の接続に失敗しました: ${key}`, error);
+        }
+      }
+
       audioCache[key] = audio;
     }
 
     async function unlockAudio() {
+      if (audioContext && audioContext.state !== "running") {
+        try {
+          await audioContext.resume();
+        } catch (_) {}
+      }
+
       const attempts = Object.values(audioCache).map(async (audio) => {
         const oldMuted = audio.muted;
         audio.muted = true;
@@ -531,34 +564,102 @@
     }
 
     function playAudio(key) {
-      return new Promise((resolve) => {
+      return new Promise(async (resolve) => {
         const audio = audioCache[key];
         if (!audio) return resolve();
+
+        if (audioContext && audioContext.state !== "running") {
+          try {
+            await audioContext.resume();
+          } catch (_) {}
+        }
+
+        audio.pause();
         audio.currentTime = 0;
 
-        const finish = () => resolve();
-        audio.addEventListener("ended", finish, { once: true });
-        audio.addEventListener("error", finish, { once: true });
-
-        audio.play().catch(() => {
-          showError(`${AUDIO_FILES[key]} を再生できませんでした。`);
+        let finished = false;
+        const finish = () => {
+          if (finished) return;
+          finished = true;
+          audio.removeEventListener("ended", finish);
+          audio.removeEventListener("error", finish);
           resolve();
-        });
+        };
+
+        audio.addEventListener("ended", finish);
+        audio.addEventListener("error", finish);
+
+        try {
+          await audio.play();
+        } catch (error) {
+          console.error(`音声再生失敗: ${key}`, error);
+          showError(`${AUDIO_FILES[key]} を再生できませんでした。`);
+          finish();
+        }
       });
     }
 
-    function stopBgm() {
+    function stopBgm(resetPosition = true) {
       for (const key of ["bgm", "bgm5"]) {
         const audio = audioCache[key];
         audio.pause();
-        audio.currentTime = 0;
+        if (resetPosition) audio.currentTime = 0;
       }
-      bgmMode = "none";
+      if (resetPosition) {
+        bgmMode = "none";
+        pausedBgmMode = "none";
+      }
+    }
+
+    function pauseBgmForJudgement() {
+      bgmSuppressed = true;
+      pausedBgmMode = bgmMode;
+
+      for (const key of ["bgm", "bgm5"]) {
+        audioCache[key].pause();
+      }
+    }
+
+    function resumeBgmAfterJudgement() {
+      bgmSuppressed = false;
+
+      if (!currentTimerState || currentTimerState.status !== "running") {
+        pausedBgmMode = "none";
+        return;
+      }
+
+      const elapsed = Math.floor((Date.now() - currentTimerState.startedAt) / 1000);
+      const duration = currentTimerState.durationSeconds || GAME_SECONDS;
+      const remaining = Math.max(0, duration - elapsed);
+
+      if (remaining <= 0) {
+        stopBgm(true);
+        return;
+      }
+
+      const targetMode = remaining <= 300 ? "last5" : "normal";
+      const targetAudio = targetMode === "last5" ? audioCache.bgm5 : audioCache.bgm;
+
+      // 判定中に残り5分をまたいだ場合は、残り5分BGMを最初から再生
+      if (pausedBgmMode !== targetMode) {
+        stopBgm(true);
+      }
+
+      bgmMode = targetMode;
+      pausedBgmMode = "none";
+      targetAudio.play().catch(() => {
+        showError(targetMode === "last5"
+          ? "bgm_last5.mp3 を再生できませんでした。"
+          : "bgm.mp3 を再生できませんでした。");
+      });
     }
 
     function setBgm(mode) {
-      if (bgmMode === mode) return;
-      stopBgm();
+      if (bgmSuppressed) return;
+      if (bgmMode === mode && !audioCache[mode === "normal" ? "bgm" : "bgm5"].paused) return;
+
+      stopBgm(true);
+
       if (mode === "normal") {
         audioCache.bgm.play().catch(() => showError("bgm.mp3 を再生できませんでした。"));
         bgmMode = "normal";
@@ -573,13 +674,26 @@
       isPlayingResult = true;
       lastResultId = result.id;
 
+      // 念のため、判定音声中は必ずBGMを停止
+      if (!bgmSuppressed) pauseBgmForJudgement();
+
       await update(roomRef, { mode: "playing" });
       showScreen("playing");
 
-      for (const key of Array.isArray(result.sequence) ? result.sequence : []) {
-        await playAudio(key);
-        await new Promise(resolve => setTimeout(resolve, 1000));
+      const sequence = Array.isArray(result.sequence) ? result.sequence : [];
+
+      for (let i = 0; i < sequence.length; i++) {
+        await playAudio(sequence[i]);
+
+        // 各音声の間を1秒空ける
+        if (i < sequence.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
       }
+
+      // 最後の音声後も1秒空けてからBGMを再開
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      resumeBgmAfterJudgement();
 
       await update(roomRef, { mode: "ready", requestAt: null, result: null });
       showScreen("ready");
@@ -625,7 +739,13 @@
       if (!currentTimerState?.startedAt || currentTimerState.status !== "running") {
         const remaining = currentTimerState?.remainingSeconds ?? GAME_SECONDS;
         timerEl.textContent = formatTime(remaining);
-        timerEl.classList.toggle("warning", remaining <= 300);
+        timerEl.classList.toggle("warning", remaining <= 300 && remaining > 0);
+
+        if (currentTimerState?.status === "paused") {
+          bgmSuppressed = false;
+          stopBgm(false);
+        }
+
         return;
       }
 
@@ -637,7 +757,8 @@
       timerEl.classList.toggle("warning", remaining <= 300);
 
       if (remaining <= 0) {
-        stopBgm();
+        bgmSuppressed = false;
+        stopBgm(true);
         brokenScreen.classList.add("active");
         update(roomRef, {
           timer: {
@@ -656,17 +777,29 @@
 
     judgeButton.addEventListener("click", async () => {
       if (currentMode !== "ready") return;
+
       judgeButton.disabled = true;
       judgeButton.classList.add("pressed");
       waitingText.textContent = "判定を受け付けました";
 
+      // ボタンを押した瞬間から、動物音声終了までBGMを止める
+      pauseBgmForJudgement();
+
+      // 判定ボタン専用効果音
+      await playAudio("button");
+
       try {
-        await update(roomRef, { mode: "waiting", requestAt: Date.now(), result: null });
+        await update(roomRef, {
+          mode: "waiting",
+          requestAt: Date.now(),
+          result: null
+        });
       } catch (error) {
         showError("判定要求の送信に失敗しました。");
         judgeButton.disabled = false;
         judgeButton.classList.remove("pressed");
         waitingText.textContent = "";
+        resumeBgmAfterJudgement();
       }
     });
 
@@ -697,8 +830,12 @@
         videoOverlay.classList.remove("active");
       }
 
-      if (currentTimerState.status !== "running") {
-        stopBgm();
+      if (currentTimerState.status === "idle" || currentTimerState.status === "ended") {
+        bgmSuppressed = false;
+        stopBgm(true);
+      } else if (currentTimerState.status === "paused") {
+        bgmSuppressed = false;
+        stopBgm(false);
       }
 
       status.textContent = `ROOM: ${roomId} / ${mode}`;
