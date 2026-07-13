@@ -47,6 +47,8 @@
     <div id="timerReadout" class="timer-readout">20:00</div>
     <div class="grid2">
       <button id="startGame" class="primary">20分タイマー開始</button>
+      <button id="pauseTimer">タイマー停止</button>
+      <button id="resumeTimer">タイマー再開</button>
       <button id="resetGame" class="danger">公演リセット</button>
       <button id="breakSystem" class="danger">システム崩壊</button>
       <button id="showReady">判定ボタン表示</button>
@@ -172,6 +174,11 @@ onValue(roomRef,snapshot=>{
   requestPanel.classList.toggle("active",state.mode==="waiting");
   judgeSubmit.disabled=state.mode!=="waiting";
   current.textContent=`現在の状態：${modeLabel(state.mode||"dead")}`;
+
+  const timerStatus = state.timer?.status || "idle";
+  document.getElementById("pauseTimer").disabled = timerStatus !== "running";
+  document.getElementById("resumeTimer").disabled = timerStatus !== "paused";
+
   if(state.mode==="waiting")setTimeout(()=>wordInput.focus(),50);
   updateTimerReadout();
   if(!timerTicker)timerTicker=setInterval(updateTimerReadout,250);
@@ -180,6 +187,40 @@ onValue(roomRef,snapshot=>{
 document.getElementById("startGame").addEventListener("click",async()=>{
   await update(roomRef,{
     timer:{status:"running",startedAt:Date.now(),durationSeconds:GAME_SECONDS,remainingSeconds:GAME_SECONDS}
+  });
+});
+
+document.getElementById("pauseTimer").addEventListener("click", async () => {
+  const timer = state.timer || {};
+  if (timer.status !== "running" || !timer.startedAt) return;
+
+  const duration = timer.durationSeconds || GAME_SECONDS;
+  const elapsed = Math.floor((Date.now() - timer.startedAt) / 1000);
+  const remaining = Math.max(0, duration - elapsed);
+
+  await update(roomRef, {
+    timer: {
+      status: "paused",
+      startedAt: null,
+      durationSeconds: duration,
+      remainingSeconds: remaining
+    }
+  });
+});
+
+document.getElementById("resumeTimer").addEventListener("click", async () => {
+  const timer = state.timer || {};
+  if (timer.status !== "paused") return;
+
+  const remaining = Math.max(0, timer.remainingSeconds ?? GAME_SECONDS);
+
+  await update(roomRef, {
+    timer: {
+      status: "running",
+      startedAt: Date.now(),
+      durationSeconds: remaining,
+      remainingSeconds: remaining
+    }
   });
 });
 
