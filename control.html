@@ -1,133 +1,102 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SELECT WORD | CONTROL</title>
   <style>
     :root {
       color-scheme: dark;
-      --bg: #0a0a0a;
-      --panel: #141414;
-      --fg: #f5f5f5;
-      --muted: #999;
-      --line: #2c2c2c;
+      --bg:#090909; --panel:#151515; --fg:#f5f5f5; --muted:#999;
+      --line:#303030; --yellow:#ffd400;
     }
-
-    * { box-sizing: border-box; }
-
-    body {
-      margin: 0;
-      min-height: 100vh;
-      padding: 24px;
-      background: var(--bg);
-      color: var(--fg);
-      font-family: "Noto Sans JP", system-ui, sans-serif;
-    }
-
-    .wrap {
-      width: min(100%, 620px);
-      margin: 0 auto;
-    }
-
-    h1 {
-      margin: 0 0 8px;
-      font-size: 24px;
-      letter-spacing: 0.08em;
-    }
-
-    .sub {
-      margin: 0 0 24px;
-      color: var(--muted);
-      font-size: 14px;
-    }
-
-    .panel {
-      padding: 20px;
-      border: 1px solid var(--line);
-      border-radius: 18px;
-      background: var(--panel);
-    }
-
-    .room {
-      margin-bottom: 18px;
-      color: var(--muted);
-      font-size: 13px;
-    }
-
-    .buttons {
-      display: grid;
-      gap: 14px;
-    }
-
-    button {
-      width: 100%;
-      min-height: 78px;
-      border: 1px solid #555;
-      border-radius: 14px;
-      background: #1d1d1d;
-      color: var(--fg);
-      font-size: 20px;
-      font-weight: 700;
-      cursor: pointer;
-    }
-
-    button:active {
-      transform: scale(0.985);
-    }
-
-    button.primary {
-      border-color: #ddd;
-      background: #f2f2f2;
-      color: #080808;
-    }
-
-    .current {
-      margin-top: 18px;
-      padding-top: 18px;
-      border-top: 1px solid var(--line);
-      color: var(--muted);
-      font-size: 14px;
-    }
-
-    .message {
-      min-height: 1.6em;
-      margin-top: 14px;
-      font-size: 14px;
-    }
-
-    .ok { color: #aef0bf; }
-    .ng { color: #ffaaaa; }
+    *{box-sizing:border-box}
+    body{margin:0;min-height:100vh;padding:22px;background:var(--bg);color:var(--fg);font-family:"Noto Sans JP",system-ui,sans-serif}
+    .wrap{width:min(100%,720px);margin:0 auto}
+    h1{margin:0 0 6px;font-size:24px;letter-spacing:.06em}
+    .sub{margin:0 0 22px;color:var(--muted);font-size:14px}
+    .panel{margin-bottom:16px;padding:18px;border:1px solid var(--line);border-radius:18px;background:var(--panel)}
+    .panel-title{margin:0 0 14px;font-size:15px;color:#ccc}
+    .room{margin-bottom:14px;color:var(--muted);font-size:13px}
+    label{display:block;margin-bottom:7px;color:#bbb;font-size:13px}
+    input{width:100%;height:58px;padding:0 16px;border:1px solid #444;border-radius:12px;outline:none;background:#0d0d0d;color:white;font:inherit;font-size:18px}
+    input:focus{border-color:var(--yellow)}
+    .row{display:grid;grid-template-columns:1fr auto;gap:10px}
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    button{min-height:58px;padding:0 18px;border:1px solid #555;border-radius:12px;background:#1d1d1d;color:var(--fg);font:inherit;font-weight:700;cursor:pointer}
+    button.primary{border-color:var(--yellow);background:var(--yellow);color:#111}
+    button.danger{border-color:#633;color:#ffb0b0}
+    button:disabled{opacity:.4;cursor:default}
+    .request{display:none;border-color:#7b6814;box-shadow:0 0 0 1px rgba(255,212,0,.15) inset}
+    .request.active{display:block}
+    .notice{margin-bottom:13px;color:var(--yellow);font-weight:700}
+    .current{color:var(--muted);font-size:14px;line-height:1.7}
+    .message{min-height:1.5em;margin-top:12px;font-size:14px}
+    .ok{color:#aef0bf}.ng{color:#ffaaaa}
+    .timer-readout{margin-bottom:14px;font-family:ui-monospace,monospace;font-size:38px;font-weight:900;letter-spacing:.08em}
   </style>
 </head>
 <body>
-  <main class="wrap">
-    <h1>SELECT WORD CONTROL</h1>
-    <p class="sub">タブレット表示を遠隔操作します。</p>
+<main class="wrap">
+  <h1>SELECT WORD CONTROL</h1>
+  <p class="sub">判定・動画・制限時間・BGMを操作します。</p>
 
-    <section class="panel">
-      <div id="roomText" class="room"></div>
+  <section class="panel">
+    <div id="roomText" class="room"></div>
+    <h2 class="panel-title">ゲーム進行</h2>
+    <div id="timerReadout" class="timer-readout">20:00</div>
+    <div class="grid2">
+      <button id="startGame" class="primary">20分タイマー開始</button>
+      <button id="resetGame" class="danger">公演リセット</button>
+      <button id="breakSystem" class="danger">システム崩壊</button>
+      <button id="showReady">判定ボタン表示</button>
+    </div>
+    <div id="current" class="current" style="margin-top:14px">現在の状態：確認中…</div>
+  </section>
 
-      <div class="buttons">
-        <button id="showDead">充電切れ画面を表示</button>
-        <button id="showJudge" class="primary">判定ボタンを表示</button>
-      </div>
+  <section class="panel">
+    <h2 class="panel-title">動画通信</h2>
+    <label for="videoInput">再生するMP4のパス</label>
+    <div class="row">
+      <input id="videoInput" type="text" value="video/event.mp4" placeholder="video/event.mp4">
+      <button id="playVideo" class="primary">動画を送信</button>
+    </div>
+    <div class="message">送信すると、通信音 → 特殊フレーム内で動画再生 → 終了後に自動で閉じます。</div>
+  </section>
 
-      <div id="current" class="current">現在の表示：確認中...</div>
-      <div id="message" class="message"></div>
-    </section>
-  </main>
+  <section class="panel">
+    <h2 class="panel-title">正解ワード設定</h2>
+    <div class="row">
+      <input id="answerInput" type="text" autocomplete="off" placeholder="例：band">
+      <button id="saveAnswer">保存</button>
+    </div>
+    <div id="answerStatus" class="message"></div>
+  </section>
 
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
-    import {
-      getDatabase,
-      ref,
-      set,
-      onValue
-    } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-database.js";
+  <section id="requestPanel" class="panel request">
+    <div class="notice">判定ボタンが押されました</div>
+    <label for="wordInput">提出された言葉</label>
+    <div class="row">
+      <input id="wordInput" type="text" autocomplete="off" enterkeyhint="send" placeholder="言葉を入力">
+      <button id="judgeSubmit" class="primary">判定する</button>
+    </div>
+    <div id="judgeMessage" class="message"></div>
+  </section>
 
-    const firebaseConfig = {
+  <section class="panel">
+    <h2 class="panel-title">その他の表示操作</h2>
+    <div class="grid2">
+      <button id="showDead" class="danger">充電切れ画面</button>
+      <button id="showReady2">判定ボタン画面</button>
+    </div>
+  </section>
+</main>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
+import { getDatabase, ref, onValue, update } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-database.js";
+
+const firebaseConfig = {
   apiKey: "AIzaSyA-f7Dplo95j3NYBCXHSxEBGhFXgAa35lU",
   authDomain: "select-word-01.firebaseapp.com",
   databaseURL: "https://select-word-01-default-rtdb.asia-southeast1.firebasedatabase.app",
@@ -137,51 +106,144 @@
   appId: "1:1014781061586:web:3ed1752379994818d5c00b"
 };
 
-    const params = new URLSearchParams(location.search);
-    const roomId = params.get("room") || "main";
+const GAME_SECONDS = 20 * 60;
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+const roomId = new URLSearchParams(location.search).get("room") || "main";
+const roomRef = ref(db, `selectWord/rooms/${roomId}`);
 
-    const roomText = document.getElementById("roomText");
-    const current = document.getElementById("current");
-    const message = document.getElementById("message");
-    const showDead = document.getElementById("showDead");
-    const showJudge = document.getElementById("showJudge");
+const roomText = document.getElementById("roomText");
+const answerInput = document.getElementById("answerInput");
+const answerStatus = document.getElementById("answerStatus");
+const requestPanel = document.getElementById("requestPanel");
+const wordInput = document.getElementById("wordInput");
+const judgeSubmit = document.getElementById("judgeSubmit");
+const judgeMessage = document.getElementById("judgeMessage");
+const current = document.getElementById("current");
+const timerReadout = document.getElementById("timerReadout");
+let state = {};
+let timerTicker = null;
 
-    roomText.textContent = `操作ルーム：${roomId}`;
+roomText.textContent = `操作ルーム：${roomId}`;
 
-    function setMessage(text, isError = false) {
-      message.textContent = text;
-      message.className = `message ${isError ? "ng" : "ok"}`;
-    }
+function chars(text){return Array.from(text.normalize("NFC"))}
+function normalizeForCompare(text){return text.trim().normalize("NFC").toLocaleLowerCase("ja")}
+function detectCharType(text){
+  const v=text.trim();
+  if(!v)return"empty";
+  if(/^[A-Za-z]+$/.test(v))return"latin";
+  if(/^[\u3040-\u309Fー]+$/.test(v))return"hiragana";
+  if(/^[\u30A0-\u30FFー]+$/.test(v))return"katakana";
+  if(/^[\u4E00-\u9FFF々〆ヵヶ]+$/.test(v))return"kanji";
+  if(/^[0-9]+$/.test(v))return"number";
+  return"mixed";
+}
+function buildSequence(inputRaw,answerRaw){
+  const input=normalizeForCompare(inputRaw), answer=normalizeForCompare(answerRaw);
+  const ic=chars(input), ac=chars(answer);
+  const sequence=[input===answer?"correct":"incorrect"];
+  if(detectCharType(inputRaw)===detectCharType(answerRaw))sequence.push("human");
+  if(ic.length===ac.length)sequence.push("sheep");
+  else if(ic.length>ac.length)sequence.push("crow");
+  else sequence.push("tiger");
+  ["dog","cat","horse","cow"].forEach((s,i)=>{if(ic[i]!==undefined&&ac[i]!==undefined&&ic[i]===ac[i])sequence.push(s)});
+  return sequence;
+}
+function setMessage(el,text,error=false){el.textContent=text;el.className=`message ${error?"ng":"ok"}`}
+function modeLabel(mode){
+  return {dead:"充電切れ画面",ready:"判定ボタン待機",waiting:"言葉の入力待ち",playing:"音声再生中",broken:"システム崩壊"}[mode]||mode||"未設定";
+}
+function fmt(seconds){
+  const s=Math.max(0,Math.ceil(seconds));
+  return `${String(Math.floor(s/60)).padStart(2,"0")}:${String(s%60).padStart(2,"0")}`;
+}
+function updateTimerReadout(){
+  const t=state.timer||{remainingSeconds:GAME_SECONDS,status:"idle"};
+  let remaining=t.remainingSeconds??GAME_SECONDS;
+  if(t.status==="running"&&t.startedAt){
+    remaining=Math.max(0,(t.durationSeconds||GAME_SECONDS)-Math.floor((Date.now()-t.startedAt)/1000));
+  }
+  timerReadout.textContent=fmt(remaining);
+}
 
-    try {
-      const app = initializeApp(firebaseConfig);
-      const db = getDatabase(app);
-      const stateRef = ref(db, `selectWord/rooms/${roomId}/screen`);
+onValue(roomRef,snapshot=>{
+  state=snapshot.val()||{};
+  if(document.activeElement!==answerInput)answerInput.value=state.answer||"";
+  requestPanel.classList.toggle("active",state.mode==="waiting");
+  judgeSubmit.disabled=state.mode!=="waiting";
+  current.textContent=`現在の状態：${modeLabel(state.mode||"dead")}`;
+  if(state.mode==="waiting")setTimeout(()=>wordInput.focus(),50);
+  updateTimerReadout();
+  if(!timerTicker)timerTicker=setInterval(updateTimerReadout,250);
+});
 
-      onValue(stateRef, (snapshot) => {
-        const value = snapshot.val() || "dead";
-        current.textContent =
-          value === "judge"
-            ? "現在の表示：判定ボタン"
-            : "現在の表示：充電切れ";
-      });
+document.getElementById("startGame").addEventListener("click",async()=>{
+  await update(roomRef,{
+    mode:"ready",
+    timer:{status:"running",startedAt:Date.now(),durationSeconds:GAME_SECONDS,remainingSeconds:GAME_SECONDS}
+  });
+});
 
-      async function changeScreen(screen) {
-        try {
-          await set(stateRef, screen);
-          setMessage("表示を切り替えました。");
-        } catch (error) {
-          console.error(error);
-          setMessage("切り替えに失敗しました。Firebaseの設定を確認してください。", true);
-        }
+document.getElementById("resetGame").addEventListener("click",async()=>{
+  await update(roomRef,{
+    mode:"dead",
+    timer:{
+      status:"idle",
+      startedAt:null,
+      durationSeconds:GAME_SECONDS,
+      remainingSeconds:GAME_SECONDS
+    },
+    videoCommand:null,
+    result:null,
+    requestAt:null
+  });
+  document.getElementById("videoInput").value="video/event.mp4";
+  wordInput.value="";
+  judgeMessage.textContent="";
+});
+
+document.getElementById("breakSystem").addEventListener("click",()=>update(roomRef,{mode:"broken"}));
+document.getElementById("showReady").addEventListener("click",()=>update(roomRef,{mode:"ready"}));
+document.getElementById("showReady2").addEventListener("click",()=>update(roomRef,{mode:"ready"}));
+document.getElementById("showDead").addEventListener("click",()=>update(roomRef,{mode:"dead",result:null,requestAt:null}));
+
+document.getElementById("playVideo").addEventListener("click",async()=>{
+  const src=document.getElementById("videoInput").value.trim()||"video/event.mp4";
+  await update(roomRef,{videoCommand:{id:`${Date.now()}-${Math.random().toString(36).slice(2)}`,src}});
+});
+
+document.getElementById("saveAnswer").addEventListener("click",async()=>{
+  const answer=answerInput.value.trim();
+  if(!answer)return setMessage(answerStatus,"正解ワードを入力してください。",true);
+  try{await update(roomRef,{answer});setMessage(answerStatus,"正解ワードを保存しました。")}
+  catch(e){setMessage(answerStatus,"保存に失敗しました。",true)}
+});
+
+async function submitJudgement(){
+  const input=wordInput.value.trim(), answer=(state.answer||"").trim();
+  if(!answer)return setMessage(judgeMessage,"先に正解ワードを保存してください。",true);
+  if(!input)return setMessage(judgeMessage,"提出された言葉を入力してください。",true);
+  const sequence=buildSequence(input,answer);
+  judgeSubmit.disabled=true;
+  try{
+    await update(roomRef,{
+      mode:"playing",
+      result:{
+        id:`${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        submittedWord:input,
+        isCorrect:normalizeForCompare(input)===normalizeForCompare(answer),
+        sequence
       }
-
-      showDead.addEventListener("click", () => changeScreen("dead"));
-      showJudge.addEventListener("click", () => changeScreen("judge"));
-    } catch (error) {
-      console.error(error);
-      setMessage("Firebaseの設定が未入力、または正しくありません。", true);
-    }
-  </script>
+    });
+    wordInput.value="";
+    setMessage(judgeMessage,`音声を送信しました：${sequence.join(" → ")}`);
+  }catch(e){
+    setMessage(judgeMessage,"判定結果の送信に失敗しました。",true);
+    judgeSubmit.disabled=false;
+  }
+}
+judgeSubmit.addEventListener("click",submitJudgement);
+wordInput.addEventListener("keydown",e=>{if(e.key==="Enter")submitJudgement()});
+</script>
 </body>
 </html>
