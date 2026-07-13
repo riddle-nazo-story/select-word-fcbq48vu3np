@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>SELECT WORD | DISPLAY</title>
   <style>
     :root {
@@ -10,13 +10,12 @@
       --bg: #050505;
       --fg: #f5f5f5;
       --muted: #8b8b8b;
-      --line: #2a2a2a;
+      --yellow: #ffd400;
+      --yellow-dark: #9e7d00;
+      --danger: #ff2d2d;
     }
 
-    * {
-      box-sizing: border-box;
-      -webkit-tap-highlight-color: transparent;
-    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
     html, body {
       width: 100%;
@@ -28,9 +27,40 @@
       font-family: "Noto Sans JP", system-ui, sans-serif;
     }
 
-    body {
-      display: grid;
-      place-items: center;
+    body { display: grid; place-items: center; }
+
+    .timer {
+      display: none;
+      position: fixed;
+      top: 18px;
+      left: 50%;
+      z-index: 50;
+      transform: translateX(-50%);
+      min-width: 180px;
+      padding: 10px 18px;
+      border: 1px solid #454545;
+      border-radius: 999px;
+      background: rgba(5,5,5,.82);
+      backdrop-filter: blur(8px);
+      color: #fff;
+      text-align: center;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: clamp(24px, 4vw, 42px);
+      font-weight: 800;
+      letter-spacing: .08em;
+      box-shadow: 0 8px 30px rgba(0,0,0,.4);
+    }
+
+    .timer.visible { display: block; }
+
+    .timer.warning {
+      border-color: var(--danger);
+      color: #ff7373;
+      animation: timerPulse 1s infinite;
+    }
+
+    @keyframes timerPulse {
+      50% { transform: translateX(-50%) scale(1.04); }
     }
 
     .screen {
@@ -40,15 +70,12 @@
       align-items: center;
       justify-content: center;
       flex-direction: column;
-      padding: 5vw;
+      padding: 90px 5vw 5vw;
       text-align: center;
     }
 
-    .screen.active {
-      display: flex;
-    }
+    .screen.active { display: flex; }
 
-    /* 充電切れ */
     .battery-wrap {
       position: relative;
       width: min(42vw, 360px);
@@ -83,46 +110,190 @@
       margin-top: 4vh;
       color: var(--muted);
       font-size: clamp(18px, 3vw, 34px);
-      letter-spacing: 0.12em;
+      letter-spacing: .12em;
     }
 
     @keyframes blink {
       0%, 45% { opacity: 1; }
-      50%, 100% { opacity: 0.2; }
+      50%, 100% { opacity: .2; }
     }
 
-    /* 判定画面 */
     .judge-label {
-      margin-bottom: 3vh;
+      margin-bottom: 4vh;
       color: var(--muted);
       font-size: clamp(15px, 2vw, 24px);
-      letter-spacing: 0.25em;
+      letter-spacing: .25em;
     }
 
     .judge-button {
-      width: min(72vw, 720px);
-      min-height: min(28vh, 220px);
-      border: 3px solid var(--fg);
-      border-radius: 28px;
-      background: transparent;
-      color: var(--fg);
-      font-size: clamp(42px, 8vw, 92px);
-      font-weight: 700;
-      letter-spacing: 0.16em;
+      width: min(42vw, 320px);
+      aspect-ratio: 1;
+      border: none;
+      border-radius: 50%;
+      background: var(--yellow);
+      color: #111;
+      font-size: clamp(38px, 7vw, 76px);
+      font-weight: 800;
+      letter-spacing: .08em;
+      cursor: pointer;
+      box-shadow: 0 14px 0 var(--yellow-dark), 0 22px 34px rgba(0,0,0,.45);
+      transition: transform .08s ease, box-shadow .08s ease, filter .15s;
+      touch-action: manipulation;
+    }
+
+    .judge-button:active,
+    .judge-button.pressed {
+      transform: translateY(10px);
+      box-shadow: 0 4px 0 var(--yellow-dark), 0 10px 18px rgba(0,0,0,.45);
+    }
+
+    .judge-button:disabled {
       cursor: default;
-      box-shadow: 0 0 0 1px var(--line) inset;
+      filter: brightness(.42) saturate(.5);
+      transform: translateY(10px);
+      box-shadow: 0 4px 0 #4d4000, 0 10px 18px rgba(0,0,0,.45);
+    }
+
+    .waiting-text {
+      min-height: 1.5em;
+      margin-top: 5vh;
+      color: var(--muted);
+      font-size: clamp(16px, 2.5vw, 28px);
+      letter-spacing: .1em;
+    }
+
+    .video-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 8vh 5vw 5vw;
+      background:
+        radial-gradient(circle at center, rgba(28,50,65,.38), rgba(0,0,0,.92) 70%),
+        rgba(0,0,0,.9);
+    }
+
+    .video-overlay.active { display: flex; }
+
+    .video-shell {
+      position: relative;
+      width: min(88vw, 1100px);
+      padding: 18px;
+      border: 2px solid #74dbff;
+      border-radius: 18px;
+      background: rgba(4,13,18,.92);
+      box-shadow:
+        0 0 0 4px rgba(116,219,255,.12),
+        0 0 55px rgba(44,184,255,.28),
+        inset 0 0 40px rgba(44,184,255,.08);
+      clip-path: polygon(18px 0, calc(100% - 18px) 0, 100% 18px, 100% calc(100% - 18px), calc(100% - 18px) 100%, 18px 100%, 0 calc(100% - 18px), 0 18px);
+    }
+
+    .video-shell::before,
+    .video-shell::after {
+      content: "";
+      position: absolute;
+      z-index: 2;
+      width: 92px;
+      height: 3px;
+      background: #74dbff;
+      box-shadow: 0 0 14px #74dbff;
+    }
+
+    .video-shell::before { top: 8px; left: 34px; }
+    .video-shell::after { right: 34px; bottom: 8px; }
+
+    .video-title {
+      margin: 0 0 12px;
+      color: #9ee8ff;
+      font-family: ui-monospace, monospace;
+      font-size: clamp(12px, 1.7vw, 18px);
+      letter-spacing: .22em;
+      text-align: left;
+    }
+
+    .video-shell video {
+      display: block;
+      width: 100%;
+      max-height: 72vh;
+      border: 1px solid rgba(116,219,255,.35);
+      border-radius: 8px;
+      background: #000;
+    }
+
+    .broken {
+      position: fixed;
+      inset: 0;
+      z-index: 200;
+      display: none;
+      overflow: hidden;
+      background: #050505;
+    }
+
+    .broken.active { display: block; }
+
+    .broken::before {
+      content: "";
+      position: absolute;
+      inset: -30%;
+      background:
+        repeating-linear-gradient(0deg, transparent 0 4px, rgba(255,255,255,.08) 5px 6px),
+        linear-gradient(90deg, rgba(255,0,0,.13), transparent 35%, rgba(0,170,255,.12));
+      animation: noiseMove .14s steps(2) infinite;
+    }
+
+    .broken-message {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 90%;
+      transform: translate(-50%,-50%);
+      color: #ff3838;
+      font-family: ui-monospace, monospace;
+      font-size: clamp(34px, 8vw, 100px);
+      font-weight: 900;
+      letter-spacing: .08em;
+      text-shadow: 4px 0 #0ff, -4px 0 #f0f;
+      animation: glitch .16s infinite;
+    }
+
+    .broken-sub {
+      display: block;
+      margin-top: 22px;
+      color: #ddd;
+      font-size: clamp(14px, 2.2vw, 28px);
+      letter-spacing: .22em;
+    }
+
+    @keyframes noiseMove {
+      0% { transform: translate(0,0); }
+      25% { transform: translate(3%,-2%); }
+      50% { transform: translate(-2%,3%); }
+      75% { transform: translate(1%,-3%); }
+    }
+
+    @keyframes glitch {
+      0%, 100% { transform: translate(-50%,-50%) skew(0deg); opacity: 1; }
+      20% { transform: translate(-51%,-49%) skew(2deg); }
+      40% { transform: translate(-49%,-52%) skew(-3deg); opacity: .7; }
+      60% { transform: translate(-52%,-48%) skew(1deg); }
+      80% { transform: translate(-48%,-51%) skew(-2deg); }
     }
 
     .status {
       position: fixed;
-      right: 16px;
-      bottom: 12px;
-      color: #555;
-      font-size: 12px;
+      right: 14px;
+      bottom: 10px;
+      z-index: 250;
+      color: #444;
+      font-size: 11px;
     }
 
     .error {
       position: fixed;
+      z-index: 300;
       inset: auto 20px 20px;
       display: none;
       padding: 12px 16px;
@@ -135,80 +306,293 @@
   </style>
 </head>
 <body>
-  <main id="deadScreen" class="screen active" aria-label="充電切れ画面">
-    <div class="battery-wrap">
-      <div class="battery-low"></div>
-    </div>
+  <div id="timer" class="timer">20:00</div>
+
+  <main id="deadScreen" class="screen active">
+    <div class="battery-wrap"><div class="battery-low"></div></div>
     <div class="dead-text">BATTERY EMPTY</div>
   </main>
 
-  <main id="judgeScreen" class="screen" aria-label="判定画面">
+  <main id="judgeScreen" class="screen">
     <div class="judge-label">SELECT WORD SYSTEM</div>
-    <button class="judge-button" type="button" tabindex="-1">判 定</button>
+    <button id="judgeButton" class="judge-button" type="button">判 定</button>
+    <div id="waitingText" class="waiting-text"></div>
   </main>
+
+  <section id="videoOverlay" class="video-overlay">
+    <div class="video-shell">
+      <div class="video-title">INCOMING TRANSMISSION</div>
+      <video id="eventVideo" playsinline></video>
+    </div>
+  </section>
+
+  <section id="brokenScreen" class="broken">
+    <div class="broken-message">
+      SYSTEM FAILURE
+      <span class="broken-sub">CONNECTION LOST / FATAL ERROR</span>
+    </div>
+  </section>
 
   <div id="status" class="status">接続中...</div>
   <div id="error" class="error"></div>
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
-    import {
-      getDatabase,
-      ref,
-      onValue
-    } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-database.js";
+    import { getDatabase, ref, onValue, update } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-database.js";
 
     const firebaseConfig = {
-  apiKey: "AIzaSyA-f7Dplo95j3NYBCXHSxEBGhFXgAa35lU",
-  authDomain: "select-word-01.firebaseapp.com",
-  databaseURL: "https://select-word-01-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "select-word-01",
-  storageBucket: "select-word-01.firebasestorage.app",
-  messagingSenderId: "1014781061586",
-  appId: "1:1014781061586:web:3ed1752379994818d5c00b"
-};
+      apiKey: "AIzaSyA-f7Dplo95j3NYBCXHSxEBGhFXgAa35lU",
+      authDomain: "select-word-01.firebaseapp.com",
+      databaseURL: "https://select-word-01-default-rtdb.asia-southeast1.firebasedatabase.app",
+      projectId: "select-word-01",
+      storageBucket: "select-word-01.firebasestorage.app",
+      messagingSenderId: "1014781061586",
+      appId: "1:1014781061586:web:3ed1752379994818d5c00b"
+    };
 
-    const params = new URLSearchParams(location.search);
-    const roomId = params.get("room") || "main";
+    const AUDIO_FILES = {
+      correct: "audio/correct.mp3",
+      incorrect: "audio/incorrect.mp3",
+      human: "audio/human.mp3",
+      sheep: "audio/sheep.mp3",
+      dog: "audio/dog.mp3",
+      cat: "audio/cat.mp3",
+      horse: "audio/horse.mp3",
+      cow: "audio/cow.mp3",
+      crow: "audio/crow.mp3",
+      tiger: "audio/tiger.mp3",
+      incoming: "audio/incoming.mp3",
+      bgm: "audio/bgm.mp3",
+      bgm5: "audio/bgm_last5.mp3"
+    };
+
+    const GAME_SECONDS = 20 * 60;
+
+    const app = initializeApp(firebaseConfig);
+    const db = getDatabase(app);
+    const roomId = new URLSearchParams(location.search).get("room") || "main";
+    const roomRef = ref(db, `selectWord/rooms/${roomId}`);
 
     const deadScreen = document.getElementById("deadScreen");
     const judgeScreen = document.getElementById("judgeScreen");
+    const judgeButton = document.getElementById("judgeButton");
+    const waitingText = document.getElementById("waitingText");
+    const timerEl = document.getElementById("timer");
+    const videoOverlay = document.getElementById("videoOverlay");
+    const eventVideo = document.getElementById("eventVideo");
+    const brokenScreen = document.getElementById("brokenScreen");
     const status = document.getElementById("status");
     const errorBox = document.getElementById("error");
 
-    function showScreen(name) {
-      deadScreen.classList.toggle("active", name === "dead");
-      judgeScreen.classList.toggle("active", name === "judge");
+    let currentMode = "dead";
+    let lastResultId = "";
+    let lastVideoCommandId = "";
+    let isPlayingResult = false;
+    let timerInterval = null;
+    let currentTimerState = null;
+    let bgmMode = "none";
+
+    const audioCache = {};
+    for (const [key, src] of Object.entries(AUDIO_FILES)) {
+      const audio = new Audio(src);
+      audio.preload = "auto";
+      if (key === "bgm" || key === "bgm5") audio.loop = true;
+      audioCache[key] = audio;
     }
 
     function showError(message) {
       errorBox.textContent = message;
       errorBox.style.display = "block";
-      status.textContent = "接続エラー";
     }
 
-    try {
-      const app = initializeApp(firebaseConfig);
-      const db = getDatabase(app);
-      const stateRef = ref(db, `selectWord/rooms/${roomId}/screen`);
+    function showScreen(mode) {
+      currentMode = mode;
+      timerEl.classList.toggle("visible", mode !== "dead");
+      deadScreen.classList.toggle("active", mode === "dead");
+      judgeScreen.classList.toggle("active", mode !== "dead");
 
-      onValue(
-        stateRef,
-        (snapshot) => {
-          const screen = snapshot.val() || "dead";
-          showScreen(screen === "judge" ? "judge" : "dead");
-          status.textContent = `ROOM: ${roomId} / ${screen}`;
-          errorBox.style.display = "none";
-        },
-        (error) => {
-          console.error(error);
-          showError("Firebaseへの接続に失敗しました。設定とルールを確認してください。");
-        }
-      );
-    } catch (error) {
-      console.error(error);
-      showError("Firebaseの設定が未入力、または正しくありません。");
+      const waiting = mode === "waiting";
+      const playing = mode === "playing";
+      judgeButton.disabled = waiting || playing;
+      judgeButton.classList.toggle("pressed", waiting || playing);
+      waitingText.textContent =
+        waiting ? "判定を受け付けました" :
+        playing ? "判定中…" : "";
     }
+
+    function playAudio(key) {
+      return new Promise((resolve) => {
+        const audio = audioCache[key];
+        if (!audio) return resolve();
+        audio.currentTime = 0;
+
+        const finish = () => resolve();
+        audio.addEventListener("ended", finish, { once: true });
+        audio.addEventListener("error", finish, { once: true });
+
+        audio.play().catch(() => {
+          showError(`${AUDIO_FILES[key]} を再生できませんでした。`);
+          resolve();
+        });
+      });
+    }
+
+    function stopBgm() {
+      for (const key of ["bgm", "bgm5"]) {
+        const audio = audioCache[key];
+        audio.pause();
+        audio.currentTime = 0;
+      }
+      bgmMode = "none";
+    }
+
+    function setBgm(mode) {
+      if (bgmMode === mode) return;
+      stopBgm();
+      if (mode === "normal") {
+        audioCache.bgm.play().catch(() => showError("bgm.mp3 を再生できませんでした。"));
+        bgmMode = "normal";
+      } else if (mode === "last5") {
+        audioCache.bgm5.play().catch(() => showError("bgm_last5.mp3 を再生できませんでした。"));
+        bgmMode = "last5";
+      }
+    }
+
+    async function playResult(result) {
+      if (isPlayingResult || !result?.id || result.id === lastResultId) return;
+      isPlayingResult = true;
+      lastResultId = result.id;
+
+      await update(roomRef, { mode: "playing" });
+      showScreen("playing");
+
+      for (const key of Array.isArray(result.sequence) ? result.sequence : []) {
+        await playAudio(key);
+        await new Promise(resolve => setTimeout(resolve, 250));
+      }
+
+      await update(roomRef, { mode: "ready", requestAt: null, result: null });
+      showScreen("ready");
+      isPlayingResult = false;
+    }
+
+    async function playVideoCommand(command) {
+      if (!command?.id || command.id === lastVideoCommandId) return;
+      lastVideoCommandId = command.id;
+
+      try {
+        await playAudio("incoming");
+        eventVideo.src = command.src || "video/event.mp4";
+        videoOverlay.classList.add("active");
+        eventVideo.currentTime = 0;
+        await eventVideo.play();
+
+        await new Promise(resolve => {
+          const done = () => resolve();
+          eventVideo.addEventListener("ended", done, { once: true });
+          eventVideo.addEventListener("error", done, { once: true });
+        });
+      } catch (error) {
+        console.error(error);
+        showError("動画を再生できませんでした。");
+      } finally {
+        eventVideo.pause();
+        eventVideo.removeAttribute("src");
+        eventVideo.load();
+        videoOverlay.classList.remove("active");
+        await update(roomRef, { videoCommand: null });
+      }
+    }
+
+    function formatTime(seconds) {
+      const safe = Math.max(0, Math.ceil(seconds));
+      const min = Math.floor(safe / 60);
+      const sec = safe % 60;
+      return `${String(min).padStart(2,"0")}:${String(sec).padStart(2,"0")}`;
+    }
+
+    function updateTimer() {
+      if (!currentTimerState?.startedAt || currentTimerState.status !== "running") {
+        const remaining = currentTimerState?.remainingSeconds ?? GAME_SECONDS;
+        timerEl.textContent = formatTime(remaining);
+        timerEl.classList.toggle("warning", remaining <= 300);
+        return;
+      }
+
+      const elapsed = Math.floor((Date.now() - currentTimerState.startedAt) / 1000);
+      const duration = currentTimerState.durationSeconds || GAME_SECONDS;
+      const remaining = Math.max(0, duration - elapsed);
+
+      timerEl.textContent = formatTime(remaining);
+      timerEl.classList.toggle("warning", remaining <= 300);
+
+      if (remaining <= 0) {
+        stopBgm();
+        brokenScreen.classList.add("active");
+        update(roomRef, {
+          timer: {
+            ...currentTimerState,
+            status: "ended",
+            remainingSeconds: 0
+          },
+          mode: "broken"
+        }).catch(console.error);
+      } else if (remaining <= 300) {
+        setBgm("last5");
+      } else {
+        setBgm("normal");
+      }
+    }
+
+    judgeButton.addEventListener("click", async () => {
+      if (currentMode !== "ready") return;
+      judgeButton.disabled = true;
+      judgeButton.classList.add("pressed");
+      waitingText.textContent = "判定を受け付けました";
+
+      try {
+        await update(roomRef, { mode: "waiting", requestAt: Date.now(), result: null });
+      } catch (error) {
+        showError("判定要求の送信に失敗しました。");
+        judgeButton.disabled = false;
+        judgeButton.classList.remove("pressed");
+        waitingText.textContent = "";
+      }
+    });
+
+    onValue(roomRef, (snapshot) => {
+      const state = snapshot.val() || {};
+      const mode = state.mode || "dead";
+
+      if (mode !== "broken") {
+        showScreen(mode);
+      } else {
+        timerEl.classList.add("visible");
+      }
+      if (mode === "dead") timerEl.classList.remove("visible");
+      brokenScreen.classList.toggle("active", mode === "broken");
+
+      currentTimerState = state.timer || { status: "idle", remainingSeconds: GAME_SECONDS };
+      updateTimer();
+
+      if (!timerInterval) timerInterval = setInterval(updateTimer, 250);
+
+      if (state.result) playResult(state.result);
+      if (state.videoCommand) {
+        playVideoCommand(state.videoCommand);
+      } else if (videoOverlay.classList.contains("active")) {
+        eventVideo.pause();
+        eventVideo.removeAttribute("src");
+        eventVideo.load();
+        videoOverlay.classList.remove("active");
+      }
+
+      if (currentTimerState.status !== "running") {
+        stopBgm();
+      }
+
+      status.textContent = `ROOM: ${roomId} / ${mode}`;
+    }, () => showError("Firebaseへの接続に失敗しました。"));
   </script>
 </body>
 </html>
