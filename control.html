@@ -117,13 +117,15 @@
   </section>
 
   <section class="panel">
-    <h2 class="panel-title">動画通信</h2>
-    <label for="videoInput">再生するMP4のパス</label>
-    <div class="row">
-      <input id="videoInput" type="text" value="video/event.mp4" placeholder="video/event.mp4">
-      <button id="playVideo" class="primary">動画を送信</button>
+    <h2 class="panel-title">画面切り替え（すべて手動）</h2>
+    <div class="grid2">
+      <button id="showAttention" class="primary">画面に注目してください</button>
+      <button id="showSuccess">脱出成功・記録画面</button>
+      <button id="showFailure" class="danger">脱出失敗画像</button>
+      <button id="showReady3">判定ボタン画面へ戻す</button>
     </div>
-    <div class="message">送信すると、通信音 → 特殊フレーム内で動画再生 → 終了後に自動で閉じます。</div>
+    <div id="clearRecordStatus" class="message">記録時間：未記録</div>
+    <div class="message">正解時はタイマーのみ自動停止・記録します。画像への切り替えは自動では行いません。</div>
   </section>
 
   <section class="panel">
@@ -213,7 +215,7 @@ function buildSequence(inputRaw,answerRaw){
 }
 function setMessage(el,text,error=false){el.textContent=text;el.className=`message ${error?"ng":"ok"}`}
 function modeLabel(mode){
-  return {dead:"充電切れ画面",ready:"判定ボタン待機",waiting:"言葉の入力待ち",playing:"音声再生中",broken:"システム崩壊"}[mode]||mode||"未設定";
+  return {dead:"充電切れ画面",ready:"判定ボタン待機",waiting:"言葉の入力待ち",playing:"音声再生中",broken:"システム崩壊",attention:"画面に注目してください",success:"脱出成功・記録画面",failure:"脱出失敗画像"}[mode]||mode||"未設定";
 }
 
 function bgmLabel(mode){
@@ -273,6 +275,11 @@ onValue(roomRef,snapshot=>{
       (testResult ? `<br>直近テスト：${testResult.ok ? "成功" : "失敗"}（${testResult.key}）${testResult.message ? " / "+testResult.message : ""}` : "")
     : "タブレットの音声状態：タブレット側でセットアップ未実行";
 
+  const clearRecord = state.clearRecord;
+  document.getElementById("clearRecordStatus").textContent = clearRecord
+    ? `記録時間：残り ${clearRecord.display || "--:--"}`
+    : "記録時間：未記録";
+
   if(state.mode==="waiting")setTimeout(()=>wordInput.focus(),50);
   updateTimerReadout();
   if(!timerTicker)timerTicker=setInterval(updateTimerReadout,250);
@@ -328,6 +335,7 @@ document.getElementById("resetGame").addEventListener("click",async()=>{
       remainingSeconds:GAME_SECONDS
     },
     videoCommand:null,
+    clearRecord:null,
     result:null,
     requestAt:null,
     bgmControl:{
@@ -337,7 +345,6 @@ document.getElementById("resetGame").addEventListener("click",async()=>{
       commandId:`${Date.now()}-${Math.random().toString(36).slice(2)}`
     }
   });
-  document.getElementById("videoInput").value="video/event.mp4";
   wordInput.value="";
   judgeMessage.textContent="";
 });
@@ -346,6 +353,16 @@ document.getElementById("breakSystem").addEventListener("click",()=>update(roomR
 document.getElementById("showReady").addEventListener("click",()=>update(roomRef,{mode:"ready"}));
 document.getElementById("showReady2").addEventListener("click",()=>update(roomRef,{mode:"ready"}));
 document.getElementById("showDead").addEventListener("click",()=>update(roomRef,{mode:"dead",result:null,requestAt:null}));
+document.getElementById("showAttention").addEventListener("click",()=>update(roomRef,{mode:"attention"}));
+document.getElementById("showSuccess").addEventListener("click",async()=>{
+  if(!state.clearRecord){
+    setMessage(document.getElementById("clearRecordStatus"),"先に正解判定で記録時間を保存してください。",true);
+    return;
+  }
+  await update(roomRef,{mode:"success"});
+});
+document.getElementById("showFailure").addEventListener("click",()=>update(roomRef,{mode:"failure"}));
+document.getElementById("showReady3").addEventListener("click",()=>update(roomRef,{mode:"ready",result:null,requestAt:null}));
 
 document.getElementById("playNormalBgm").addEventListener("click", async () => {
   const volume = Number(document.getElementById("bgmVolume").value) / 100;
@@ -437,10 +454,6 @@ document.getElementById("sendAudioTest").addEventListener("click", async () => {
   });
 });
 
-document.getElementById("playVideo").addEventListener("click",async()=>{
-  const src=document.getElementById("videoInput").value.trim()||"video/event.mp4";
-  await update(roomRef,{videoCommand:{id:`${Date.now()}-${Math.random().toString(36).slice(2)}`,src}});
-});
 
 document.getElementById("saveAnswer").addEventListener("click",async()=>{
   const answer=answerInput.value.trim();
@@ -449,22 +462,61 @@ document.getElementById("saveAnswer").addEventListener("click",async()=>{
   catch(e){setMessage(answerStatus,"保存に失敗しました。",true)}
 });
 
+function getCurrentRemainingSeconds(){
+  const timer = state.timer || {};
+  if(timer.status === "running" && timer.startedAt){
+    const duration = timer.durationSeconds || GAME_SECONDS;
+    const elapsed = Math.floor((Date.now() - timer.startedAt) / 1000);
+    return Math.max(0, duration - elapsed);
+  }
+  return Math.max(0, timer.remainingSeconds ?? GAME_SECONDS);
+}
+
+function formatRecordTime(seconds){
+  const safe = Math.max(0, Math.ceil(seconds));
+  return `${String(Math.floor(safe/60)).padStart(2,"0")}:${String(safe%60).padStart(2,"0")}`;
+}
+
 async function submitJudgement(){
   const input=wordInput.value.trim(), answer=(state.answer||"").trim();
   if(!answer)return setMessage(judgeMessage,"先に正解ワードを保存してください。",true);
   if(!input)return setMessage(judgeMessage,"提出された言葉を入力してください。",true);
   const sequence=buildSequence(input,answer);
+  const isCorrect = normalizeForCompare(input)===normalizeForCompare(answer);
   judgeSubmit.disabled=true;
   try{
-    await update(roomRef,{
+    const payload = {
       mode:"playing",
       result:{
         id:`${Date.now()}-${Math.random().toString(36).slice(2)}`,
         submittedWord:input,
-        isCorrect:normalizeForCompare(input)===normalizeForCompare(answer),
+        isCorrect,
         sequence
       }
-    });
+    };
+
+    // 正解した瞬間に、動物音声より先にタイマーを停止して残り時間を保存
+    if(isCorrect){
+      const remaining = getCurrentRemainingSeconds();
+      payload.timer = {
+        status:"paused",
+        startedAt:null,
+        durationSeconds:remaining,
+        remainingSeconds:remaining
+      };
+      payload.clearRecord = {
+        remainingSeconds:remaining,
+        display:formatRecordTime(remaining),
+        recordedAt:Date.now()
+      };
+      payload.bgmControl = {
+        ...(state.bgmControl || {volume:.7,effectVolume:1}),
+        mode:"none",
+        commandId:`${Date.now()}-clear-stop`
+      };
+    }
+
+    await update(roomRef,payload);
     wordInput.value="";
     setMessage(judgeMessage,`音声を送信しました：${sequence.join(" → ")}`);
   }catch(e){
