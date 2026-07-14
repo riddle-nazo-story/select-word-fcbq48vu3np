@@ -28,7 +28,8 @@
     button.danger{border-color:#633;color:#ffb0b0}
     button:disabled{opacity:.4;cursor:default}
     .request{display:none;border-color:#7b6814;box-shadow:0 0 0 1px rgba(255,212,0,.15) inset}
-    .request.active{display:block}
+    .request.active{display:block;position:relative;animation:requestFlash .7s ease-out}
+    @keyframes requestFlash{from{box-shadow:0 0 0 5px rgba(255,212,0,.45)}to{box-shadow:0 0 0 1px rgba(255,212,0,.15) inset}}
     .notice{margin-bottom:13px;color:var(--yellow);font-weight:700}
     .phase-box{margin-top:12px;padding:14px;border:1px solid #4a4a4a;border-radius:12px;background:#0d0d0d;line-height:1.7}
     .phase-box strong{display:block;color:var(--yellow);font-size:18px}
@@ -380,7 +381,12 @@ onValue(roomRef,snapshot=>{
   document.getElementById("recordCard").classList.toggle("active", !!clearRecord);
   document.getElementById("recordCard").querySelector("strong").textContent = clearRecord?.display || "未記録";
 
-  if(state.mode==="waiting")setTimeout(()=>wordInput.focus(),50);
+  if(state.mode==="waiting") {
+    setTimeout(() => {
+      requestPanel.scrollIntoView({ behavior: "smooth", block: "center" });
+      wordInput.focus();
+    }, 80);
+  }
   updateTimerReadout();
   if(!timerTicker)timerTicker=setInterval(updateTimerReadout,250);
 });
