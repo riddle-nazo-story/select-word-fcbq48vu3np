@@ -1180,14 +1180,21 @@
       }
     });
 
+    function syncAudioUnlockButton() {
+      const judgeVisible = ["ready", "waiting", "playing"].includes(currentMode);
+      const manualVisible = ["attention", "success", "failure"].includes(currentMode);
+      const shouldHide = judgeVisible || manualVisible || !audioSetup.classList.contains("hidden");
+      audioUnlock.classList.toggle("hidden", shouldHide);
+    }
+
     closeAudioSetup.addEventListener("click", () => {
       audioSetup.classList.add("hidden");
-      audioUnlock.classList.remove("hidden");
+      syncAudioUnlockButton();
     });
 
     forceCloseAudioSetup.addEventListener("click", () => {
       audioSetup.classList.add("hidden");
-      audioUnlock.classList.remove("hidden");
+      syncAudioUnlockButton();
     });
 
     audioUnlock.addEventListener("click", () => {
@@ -1250,6 +1257,9 @@
       waitingText.textContent =
         waiting ? "判定を受け付けました" :
         playing ? "判定中…" : "";
+
+      // 判定ボタンが表示される画面では「音声設定を開く」を隠す。
+      syncAudioUnlockButton();
     }
 
     async function playEffectSafe(key) {
