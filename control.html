@@ -139,6 +139,27 @@
   </section>
 
 <section class="panel">
+    <h2 class="panel-title">NG行動・解答ルール演出</h2>
+    <div class="grid2">
+      <button id="showNgHidden" class="danger">① NG行動を伏せて表示</button>
+      <button id="revealNgAction" class="primary">② ノイズを外して公開</button>
+      <button id="showAnswerRule">③ 解答ルールを追加表示</button>
+      <button id="hideNgScreen">判定ボタン画面へ戻す</button>
+    </div>
+    <div class="message">表示内容：NG行動「黒解答ボードに黒ペンで書く」／解答ルール「解答ボードを使い解答する」</div>
+  </section>
+
+  <section class="panel">
+    <h2 class="panel-title">指定MP3効果音</h2>
+    <label for="customEffectFilename">audioフォルダ内のファイル名</label>
+    <div class="row">
+      <input id="customEffectFilename" type="text" value="ng_action.mp3" autocomplete="off" placeholder="例：ng_action.mp3">
+      <button id="playCustomEffect" class="primary">効果音を流す</button>
+    </div>
+    <div id="customEffectMessage" class="message">例：<code>audio/ng_action.mp3</code> を配置してください。</div>
+  </section>
+
+  <section class="panel">
     <h2 class="panel-title">画面切り替え（すべて手動）</h2>
     <div class="grid2">
       <button id="showAttention" class="primary">画面に注目してください</button>
@@ -237,7 +258,7 @@ function buildSequence(inputRaw,answerRaw){
 }
 function setMessage(el,text,error=false){el.textContent=text;el.className=`message ${error?"ng":"ok"}`}
 function modeLabel(mode){
-  return {dead:"充電切れ画面",ready:"判定ボタン待機",waiting:"言葉の入力待ち",playing:"音声再生中",broken:"システム崩壊",attention:"画面に注目してください",success:"脱出成功・記録画面",failure:"脱出失敗画像"}[mode]||mode||"未設定";
+  return {dead:"充電切れ画面",ready:"判定ボタン待機",waiting:"言葉の入力待ち",playing:"音声再生中",broken:"システム崩壊",attention:"画面に注目してください",success:"脱出成功・記録画面",failure:"脱出失敗画像",ngHidden:"NG行動（伏せ）",ngReveal:"NG行動（公開）",ngRule:"NG行動＋解答ルール"}[mode]||mode||"未設定";
 }
 
 function bgmLabel(mode){
@@ -385,6 +406,30 @@ document.getElementById("showSuccess").addEventListener("click",async()=>{
 });
 document.getElementById("showFailure").addEventListener("click",()=>update(roomRef,{mode:"failure"}));
 document.getElementById("showReady3").addEventListener("click",()=>update(roomRef,{mode:"ready",result:null,requestAt:null}));
+
+document.getElementById("showNgHidden").addEventListener("click",()=>update(roomRef,{mode:"ngHidden"}));
+document.getElementById("revealNgAction").addEventListener("click",()=>update(roomRef,{mode:"ngReveal"}));
+document.getElementById("showAnswerRule").addEventListener("click",()=>update(roomRef,{mode:"ngRule"}));
+document.getElementById("hideNgScreen").addEventListener("click",()=>update(roomRef,{mode:"ready"}));
+
+document.getElementById("playCustomEffect").addEventListener("click", async () => {
+  const input = document.getElementById("customEffectFilename");
+  const message = document.getElementById("customEffectMessage");
+  let filename = input.value.trim().replace(/^audio\//, "");
+  if (!filename) return setMessage(message,"MP3ファイル名を入力してください。",true);
+  if (!filename.toLowerCase().endsWith(".mp3")) filename += ".mp3";
+  if (!/^[a-zA-Z0-9._-]+$/.test(filename)) {
+    return setMessage(message,"ファイル名は半角英数字・ハイフン・アンダーバーで指定してください。",true);
+  }
+  input.value = filename;
+  await update(roomRef, {
+    customEffectCommand: {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      filename
+    }
+  });
+  setMessage(message,`audio/${filename} を再生指示しました。`);
+});
 
 document.getElementById("playNormalBgm").addEventListener("click", async () => {
   const volume = Number(document.getElementById("bgmVolume").value) / 100;
