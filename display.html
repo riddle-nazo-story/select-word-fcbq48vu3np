@@ -596,62 +596,37 @@
     }
 
 
-    /* NG行動・解答ルール表示 */
+    /* 判定ボタンと同時に表示するNG行動・解答ルール */
     .ng-screen {
-      position: fixed;
-      inset: 0;
-      z-index: 190;
+      width: min(900px, 90vw);
       display: none;
-      place-items: center;
-      overflow: hidden;
-      padding: 7vh 6vw;
-      background:
-        radial-gradient(circle at 50% 40%, rgba(38,49,60,.34), transparent 52%),
-        #030405;
+      margin: clamp(20px, 4vh, 42px) auto 0;
     }
-    .ng-screen.active { display: grid; }
+    .ng-screen.active { display: block; }
     .ng-panel {
-      width: min(900px, 92vw);
       display: grid;
-      gap: clamp(18px, 3vh, 32px);
-    }
-    .ng-heading {
-      margin: 0;
-      color: #ff3b3b;
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      font-size: clamp(18px, 3vw, 34px);
-      letter-spacing: .28em;
-      text-align: center;
-      text-shadow: 0 0 18px rgba(255,40,40,.55);
+      gap: clamp(14px, 2.2vh, 24px);
     }
     .ng-card {
       position: relative;
-      min-height: clamp(150px, 24vh, 230px);
+      min-height: clamp(88px, 14vh, 132px);
       display: grid;
       place-items: center;
-      padding: 34px 28px;
+      padding: 28px 24px 20px;
       overflow: hidden;
       border: 1px solid rgba(255,255,255,.26);
-      background: rgba(8,10,12,.92);
-      clip-path: polygon(20px 0,100% 0,100% calc(100% - 20px),calc(100% - 20px) 100%,0 100%,0 20px);
-      box-shadow: inset 0 0 0 1px rgba(255,60,60,.12), 0 0 35px rgba(255,0,0,.10);
+      background: rgba(8,10,12,.94);
+      clip-path: polygon(16px 0,100% 0,100% calc(100% - 16px),calc(100% - 16px) 100%,0 100%,0 16px);
+      box-shadow: inset 0 0 0 1px rgba(255,60,60,.12), 0 0 25px rgba(255,0,0,.08);
     }
-    .ng-card::before,
     .ng-card::after {
       content: "";
       position: absolute;
+      left: 4%; right: 4%; top: 12px; height: 2px;
       z-index: 4;
-      pointer-events: none;
-    }
-    .ng-card::before {
-      inset: 0;
-      background: repeating-linear-gradient(0deg, transparent 0 3px, rgba(255,255,255,.11) 4px 5px);
-      opacity: .3;
-    }
-    .ng-card::after {
-      left: 4%; right: 4%; top: 14px; height: 2px;
       background: #ff3434;
-      box-shadow: 0 0 14px #ff3434;
+      box-shadow: 0 0 12px #ff3434;
+      pointer-events: none;
     }
     .ng-label {
       position: absolute;
@@ -659,49 +634,61 @@
       left: 20px;
       z-index: 5;
       color: #ff7777;
-      font: 700 clamp(11px,1.5vw,15px)/1 ui-monospace,monospace;
-      letter-spacing: .2em;
+      font: 700 clamp(12px,1.6vw,16px)/1 ui-monospace,monospace;
+      letter-spacing: .16em;
     }
     .ng-text {
       position: relative;
       z-index: 2;
+      padding-top: 12px;
       color: #fff;
       font-family: "Yu Mincho", "Hiragino Mincho ProN", serif;
-      font-size: clamp(26px, 5vw, 52px);
+      font-size: clamp(22px, 3.7vw, 42px);
       font-weight: 700;
-      line-height: 1.55;
-      letter-spacing: .08em;
+      line-height: 1.45;
+      letter-spacing: .06em;
       text-align: center;
-      text-shadow: 0 0 18px rgba(255,255,255,.2);
+      text-shadow: 0 0 16px rgba(255,255,255,.18);
     }
     .ng-card.masked .ng-text { opacity: 0; }
     .ng-mask {
       position: absolute;
       inset: 0;
       z-index: 3;
-      display: grid;
-      place-items: center;
       background:
-        repeating-linear-gradient(0deg, rgba(255,255,255,.14) 0 2px, transparent 2px 6px),
-        repeating-linear-gradient(90deg, rgba(255,0,0,.10) 0 4px, rgba(0,170,255,.10) 4px 8px),
+        repeating-linear-gradient(0deg, rgba(255,255,255,.16) 0 2px, transparent 2px 6px),
+        repeating-linear-gradient(90deg, rgba(255,0,0,.12) 0 4px, rgba(0,170,255,.12) 4px 8px),
         #090a0b;
-      color: #b8bec4;
-      font: 800 clamp(18px,3vw,32px)/1 ui-monospace,monospace;
-      letter-spacing: .22em;
-      animation: ngNoise .12s steps(2) infinite;
     }
-    .ng-mask::after { content: "DATA MASKED"; }
-    .ng-card.revealing .ng-mask { animation: ngReveal .95s steps(12) forwards, ngNoise .12s steps(2) infinite; }
-    .ng-card.revealing .ng-text { animation: ngTextReveal .95s .12s both; }
+    .ng-card.revealing .ng-mask {
+      animation: ngReveal .95s steps(12) forwards;
+    }
+    .ng-card.revealing .ng-text {
+      animation: ngTextReveal .95s .1s both;
+    }
     .ng-card.revealed .ng-mask { display:none; }
-    .ng-rule-card { display:none; border-color: rgba(65,180,255,.55); box-shadow: inset 0 0 0 1px rgba(65,180,255,.12), 0 0 35px rgba(0,140,255,.13); }
-    .ng-rule-card.visible { display:grid; animation: ruleAppear .65s cubic-bezier(.2,.8,.2,1) both; }
-    .ng-rule-card::after { background:#55c8ff; box-shadow:0 0 14px #55c8ff; }
+    .ng-rule-card {
+      display:none;
+      border-color: rgba(65,180,255,.55);
+      box-shadow: inset 0 0 0 1px rgba(65,180,255,.12), 0 0 25px rgba(0,140,255,.10);
+    }
+    .ng-rule-card.visible { display:grid; animation: ruleAppear .45s ease-out both; }
+    .ng-rule-card::after { background:#55c8ff; box-shadow:0 0 12px #55c8ff; }
     .ng-rule-card .ng-label { color:#8edcff; }
-    @keyframes ngNoise { 0%{transform:translate(0,0)} 25%{transform:translate(2%,-1%)} 50%{transform:translate(-2%,2%)} 75%{transform:translate(1%,-2%)} }
-    @keyframes ngReveal { 0%{clip-path:inset(0 0 0 0);opacity:1} 75%{clip-path:inset(0 0 78% 0);opacity:.9} 100%{clip-path:inset(0 0 100% 0);opacity:0} }
-    @keyframes ngTextReveal { 0%{opacity:0;filter:blur(12px);transform:scale(.96)} 60%{opacity:.55;filter:blur(3px)} 100%{opacity:1;filter:blur(0);transform:scale(1)} }
-    @keyframes ruleAppear { from{opacity:0;transform:translateY(22px) scale(.98)} to{opacity:1;transform:none} }
+    @keyframes ngReveal {
+      0% { clip-path: inset(0 0 0 0); opacity:1; }
+      75% { clip-path: inset(0 0 78% 0); opacity:.9; }
+      100% { clip-path: inset(0 0 100% 0); opacity:0; }
+    }
+    @keyframes ngTextReveal {
+      0% { opacity:0; filter:blur(10px); }
+      60% { opacity:.55; filter:blur(3px); }
+      100% { opacity:1; filter:blur(0); }
+    }
+    @keyframes ruleAppear {
+      from { opacity:0; }
+      to { opacity:1; }
+    }
 
   </style>
 </head>
@@ -717,6 +704,20 @@
     <div class="judge-label">SELECT WORD SYSTEM</div>
     <div class="judge-console"><div class="judge-ring"><button id="judgeButton" class="judge-button" type="button">判 定</button></div></div>
     <div id="waitingText" class="waiting-text"></div>
+
+    <section id="ngScreen" class="ng-screen" aria-live="polite">
+      <div class="ng-panel">
+        <div id="ngActionCard" class="ng-card masked">
+          <div class="ng-label">NG行動</div>
+          <div class="ng-text">黒解答ボードに黒ペンで書く</div>
+          <div class="ng-mask" aria-hidden="true"></div>
+        </div>
+        <div id="answerRuleCard" class="ng-card ng-rule-card">
+          <div class="ng-label">解答ルール</div>
+          <div class="ng-text">解答ボードを使い解答する</div>
+        </div>
+      </div>
+    </section>
   </main>
 
   <section id="videoOverlay" class="video-overlay">
@@ -750,21 +751,6 @@
   </section>
 
 
-
-  <section id="ngScreen" class="ng-screen" aria-live="polite">
-    <div class="ng-panel">
-      <h2 class="ng-heading">PROHIBITED ACTION DETECTED</h2>
-      <div id="ngActionCard" class="ng-card masked">
-        <div class="ng-label">NG ACTION</div>
-        <div class="ng-text">黒解答ボードに黒ペンで書く</div>
-        <div class="ng-mask"></div>
-      </div>
-      <div id="answerRuleCard" class="ng-card ng-rule-card">
-        <div class="ng-label">ANSWER RULE</div>
-        <div class="ng-text">解答ボードを使い解答する</div>
-      </div>
-    </div>
-  </section>
 
   <button id="audioUnlock" class="audio-unlock hidden" type="button">音声設定を開く</button>
 
@@ -863,6 +849,7 @@
     const audioFileList = $("audioFileList");
 
     let currentMode = "dead";
+    let currentNgStage = "none";
     let currentTimerState = null;
     let timerInterval = null;
     let lastResultId = "";
@@ -1209,8 +1196,9 @@
       renderAudioStatus();
     });
 
-    function showScreen(mode) {
+    function showScreen(mode, ngStage = currentNgStage) {
       currentMode = mode;
+      currentNgStage = ngStage;
 
       if (mode !== "dead") {
         deadScreenTapCount = 0;
@@ -1226,23 +1214,33 @@
       attentionScreen.classList.toggle("active", mode === "attention");
       successScreen.classList.toggle("active", mode === "success");
       failureScreen.classList.toggle("active", mode === "failure");
-      ngScreen.classList.toggle("active", ["ngHidden", "ngReveal", "ngRule"].includes(mode));
 
-      if (mode === "ngHidden") {
+      // NG表示は画面モードと分離。判定待ち・判定中でも表示を維持する。
+      const showNg = ["masked", "revealed", "rule"].includes(ngStage) && ["ready", "waiting", "playing"].includes(mode);
+      ngScreen.classList.toggle("active", showNg);
+
+      if (ngStage === "masked") {
         ngActionCard.className = "ng-card masked";
         answerRuleCard.className = "ng-card ng-rule-card";
-      } else if (mode === "ngReveal") {
+      } else if (ngStage === "revealed") {
         if (!ngActionCard.classList.contains("revealed")) {
           ngActionCard.className = "ng-card revealing";
-          setTimeout(() => { if (currentMode === "ngReveal" || currentMode === "ngRule") ngActionCard.className = "ng-card revealed"; }, 1050);
+          setTimeout(() => {
+            if (["ready", "waiting", "playing"].includes(currentMode)) {
+              ngActionCard.className = "ng-card revealed";
+            }
+          }, 1050);
         }
         answerRuleCard.className = "ng-card ng-rule-card";
-      } else if (mode === "ngRule") {
+      } else if (ngStage === "rule") {
         ngActionCard.className = "ng-card revealed";
         answerRuleCard.className = "ng-card ng-rule-card visible";
+      } else {
+        ngActionCard.className = "ng-card masked";
+        answerRuleCard.className = "ng-card ng-rule-card";
       }
 
-      const isManualView = ["attention", "success", "failure", "ngHidden", "ngReveal", "ngRule"].includes(mode);
+      const isManualView = ["attention", "success", "failure"].includes(mode);
       document.body.classList.toggle("manual-view", isManualView);
 
       const waiting = mode === "waiting";
@@ -1328,7 +1326,7 @@
       pauseBgmForJudgement();
 
       await update(roomRef, { mode: "playing" });
-      showScreen("playing");
+      showScreen("playing", currentNgStage);
 
       try {
         const sequence = Array.isArray(result.sequence) ? result.sequence : [];
@@ -1347,7 +1345,7 @@
         }
         // 結果音声終了後は判定画面へ戻すだけ。演出画面は運営が手動で切り替える。
         await update(roomRef, { mode: "ready", requestAt: null, result: null });
-        showScreen("ready");
+        showScreen("ready", currentNgStage);
         isPlayingResult = false;
       }
     }
@@ -1575,7 +1573,7 @@
       const state = snapshot.val() || {};
       const mode = state.mode || "dead";
 
-      if (mode !== "broken") showScreen(mode);
+      if (mode !== "broken") showScreen(mode, state.ngStage || "none");
       else {
         showScreen("none");
         timerEl.classList.add("visible");
