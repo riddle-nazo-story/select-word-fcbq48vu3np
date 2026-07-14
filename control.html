@@ -139,14 +139,33 @@
   </section>
 
 <section class="panel">
-    <h2 class="panel-title">NG行動・解答ルール演出</h2>
+    <h2 class="panel-title">ラス謎・セクション進行</h2>
+    <div id="sectionStatus" class="notice">現在：セクション1</div>
     <div class="grid2">
-      <button id="showNgHidden" class="danger">① NG行動を伏せて表示</button>
-      <button id="revealNgAction" class="primary">② ノイズを外して公開</button>
-      <button id="showAnswerRule">③ 解答ルールを追加表示</button>
-      <button id="hideNgScreen">判定ボタン画面へ戻す</button>
+      <button id="showNgHidden" class="danger">① NG行動をノイズで表示</button>
+      <button id="revealNgAction" class="primary">② NG行動を公開</button>
+      <button id="startSection2">③ セクション2へ移行</button>
+      <button id="hideNgScreen">NG表示を消す</button>
     </div>
-    <div class="message">表示内容：NG行動「黒解答ボードに黒ペンで書く」／解答ルール「解答ボードを使い解答する」</div>
+    <div class="message">NG表示は判定ボタンと同時に表示され、判定待ち・判定中も消えません。</div>
+  </section>
+
+  <section class="panel">
+    <h2 class="panel-title">セクション2・NG行動処理</h2>
+    <label for="ngInvalidFilename">NG行動発生時のアナウンスMP3</label>
+    <div class="row">
+      <input id="ngInvalidFilename" type="text" value="ng_invalid.mp3" autocomplete="off" placeholder="例：ng_invalid.mp3">
+      <button id="triggerNgAction" class="danger">NG行動が発生</button>
+    </div>
+    <div id="reasonApprovalPanel" style="display:none;margin-top:14px;padding:14px;border:1px solid #695b16;border-radius:12px;background:#11100a">
+      <div class="notice">正解理由を確認してください</div>
+      <div class="current">「NG行動をわざと起こし、解答ボードに『むこう』と書かずにシステムの発言で答える」と説明できた場合のみ正解にしてください。</div>
+      <div class="grid2" style="margin-top:12px">
+        <button id="approveFinalAnswer" class="primary">理由確認済み・正解</button>
+        <button id="rejectFinalAnswer" class="danger">理由不十分・続行</button>
+      </div>
+    </div>
+    <div id="section2Message" class="message">セクション2では「むこう」を入力しただけでは自動正解になりません。</div>
   </section>
 
   <section class="panel">
@@ -323,6 +342,10 @@ onValue(roomRef,snapshot=>{
     ? `記録時間：残り ${clearRecord.display || "--:--"}`
     : "記録時間：未記録";
 
+  const section = Number(state.section || 1);
+  document.getElementById("sectionStatus").textContent = `現在：セクション${section}`;
+  document.getElementById("reasonApprovalPanel").style.display = state.awaitingReasonApproval ? "block" : "none";
+
   if(state.mode==="waiting")setTimeout(()=>wordInput.focus(),50);
   updateTimerReadout();
   if(!timerTicker)timerTicker=setInterval(updateTimerReadout,250);
@@ -381,6 +404,10 @@ document.getElementById("resetGame").addEventListener("click",async()=>{
     clearRecord:null,
     result:null,
     requestAt:null,
+    section:1,
+    ngStage:"none",
+    awaitingReasonApproval:false,
+    finalNgTriggered:false,
     bgmControl:{
       mode:"none",
       volume:0.7,
@@ -407,10 +434,84 @@ document.getElementById("showSuccess").addEventListener("click",async()=>{
 document.getElementById("showFailure").addEventListener("click",()=>update(roomRef,{mode:"failure"}));
 document.getElementById("showReady3").addEventListener("click",()=>update(roomRef,{mode:"ready",result:null,requestAt:null}));
 
-document.getElementById("showNgHidden").addEventListener("click",()=>update(roomRef,{mode:"ngHidden"}));
-document.getElementById("revealNgAction").addEventListener("click",()=>update(roomRef,{mode:"ngReveal"}));
-document.getElementById("showAnswerRule").addEventListener("click",()=>update(roomRef,{mode:"ngRule"}));
-document.getElementById("hideNgScreen").addEventListener("click",()=>update(roomRef,{mode:"ready"}));
+document.getElementById("showNgHidden").addEventListener("click",()=>update(roomRef,{mode:"ready",ngStage:"masked"}));
+document.getElementById("revealNgAction").addEventListener("click",()=>update(roomRef,{mode:"ready",ngStage:"revealed"}));
+document.getElementById("hideNgScreen").addEventListener("click",()=>update(roomRef,{ngStage:"none"}));
+
+document.getElementById("startSection2").addEventListener("click", async () => {
+  await update(roomRef, {
+    section:2,
+    answer:"むこう",
+    mode:"ready",
+    ngStage:"rule",
+    awaitingReasonApproval:false,
+    finalNgTriggered:false,
+    result:null,
+    requestAt:null
+  });
+  setMessage(document.getElementById("section2Message"),"セクション2へ移行しました。正解ワードは「むこう」ですが、入力だけでは正解になりません。");
+});
+
+function sanitizeMp3Filename(raw){
+  let filename = raw.trim().replace(/^audio\//, "");
+  if (!filename) return null;
+  if (!filename.toLowerCase().endsWith(".mp3")) filename += ".mp3";
+  if (!/^[a-zA-Z0-9._-]+$/.test(filename)) return null;
+  return filename;
+}
+
+async function sendCustomMp3(filename){
+  await update(roomRef, {
+    customEffectCommand: {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      filename
+    }
+  });
+}
+
+document.getElementById("triggerNgAction").addEventListener("click", async () => {
+  const message = document.getElementById("section2Message");
+  if (Number(state.section || 1) !== 2) {
+    return setMessage(message,"先にセクション2へ移行してください。",true);
+  }
+  const input = document.getElementById("ngInvalidFilename");
+  const filename = sanitizeMp3Filename(input.value);
+  if (!filename) return setMessage(message,"正しいMP3ファイル名を入力してください。",true);
+  input.value = filename;
+  await sendCustomMp3(filename);
+  await update(roomRef, {
+    finalNgTriggered:true,
+    awaitingReasonApproval:true,
+    mode:"ready",
+    requestAt:null,
+    result:null
+  });
+  setMessage(message,`NG行動アナウンス（audio/${filename}）を再生しました。参加者に正解理由を聞いてください。`);
+});
+
+document.getElementById("approveFinalAnswer").addEventListener("click", async () => {
+  if (!state.awaitingReasonApproval) return;
+  const remaining = getCurrentRemainingSeconds();
+  await update(roomRef, {
+    mode:"playing",
+    awaitingReasonApproval:false,
+    result:{
+      id:`${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      submittedWord:"むこう（NG行動による回答）",
+      isCorrect:true,
+      sequence:["correct"]
+    },
+    timer:{status:"paused",startedAt:null,durationSeconds:remaining,remainingSeconds:remaining},
+    clearRecord:{remainingSeconds:remaining,display:formatRecordTime(remaining),recordedAt:Date.now()},
+    bgmControl:{...(state.bgmControl||{volume:.7,effectVolume:.8}),mode:"none",commandId:`${Date.now()}-clear-stop`}
+  });
+  setMessage(document.getElementById("section2Message"),"理由を確認し、正解として処理しました。");
+});
+
+document.getElementById("rejectFinalAnswer").addEventListener("click", async () => {
+  await update(roomRef,{awaitingReasonApproval:false,mode:"ready",requestAt:null,result:null});
+  setMessage(document.getElementById("section2Message"),"理由が不十分のため、正解にはしていません。",true);
+});
 
 document.getElementById("playCustomEffect").addEventListener("click", async () => {
   const input = document.getElementById("customEffectFilename");
@@ -548,8 +649,25 @@ async function submitJudgement(){
   const input=wordInput.value.trim(), answer=(state.answer||"").trim();
   if(!answer)return setMessage(judgeMessage,"先に正解ワードを保存してください。",true);
   if(!input)return setMessage(judgeMessage,"提出された言葉を入力してください。",true);
+  const section2 = Number(state.section || 1) === 2;
+  const textMatches = normalizeForCompare(input)===normalizeForCompare(answer);
+
+  // セクション2では「むこう」を偶然入力しても自動正解にしない。
+  // 正解理由を口頭確認し、運営側の承認ボタンでのみクリアできる。
+  if (section2 && textMatches) {
+    await update(roomRef, {
+      mode:"ready",
+      requestAt:null,
+      result:null,
+      awaitingReasonApproval:true
+    });
+    wordInput.value="";
+    setMessage(judgeMessage,"文字は『むこう』ですが、自動正解にはしていません。参加者に理由を確認してください。",true);
+    return;
+  }
+
   const sequence=buildSequence(input,answer);
-  const isCorrect = normalizeForCompare(input)===normalizeForCompare(answer);
+  const isCorrect = textMatches && !section2;
   judgeSubmit.disabled=true;
   try{
     const payload = {
