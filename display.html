@@ -690,10 +690,14 @@
       to { opacity:1; }
     }
 
+    .phase-indicator{position:fixed;top:18px;left:18px;z-index:55;display:none;padding:9px 14px;border:1px solid #444;border-radius:999px;background:rgba(5,5,5,.82);color:#aaa;font:700 12px/1 ui-monospace,monospace;letter-spacing:.12em;backdrop-filter:blur(8px)}
+    .phase-indicator.visible{display:block}.phase-indicator strong{color:#ffd400}
+
   </style>
 </head>
 <body>
   <div id="timer" class="timer">20:00</div>
+  <div id="phaseIndicator" class="phase-indicator"><strong>SECTION 1</strong></div>
 
   <main id="deadScreen" class="screen active">
     <div class="battery-wrap"><div class="battery-low"></div></div>
@@ -713,8 +717,8 @@
           <div class="ng-mask" aria-hidden="true"></div>
         </div>
         <div id="answerRuleCard" class="ng-card ng-rule-card">
-          <div class="ng-label">NG行動2</div>
-          <div class="ng-text">解答ボードに記入して解答する</div>
+          <div class="ng-label">解答ルール</div>
+          <div class="ng-text">解答ボードを用いて解答する</div>
         </div>
       </div>
     </section>
@@ -823,6 +827,7 @@
     const judgeButton = $("judgeButton");
     const waitingText = $("waitingText");
     const timerEl = $("timer");
+    const phaseIndicator = $("phaseIndicator");
     const videoOverlay = $("videoOverlay");
     const eventVideo = $("eventVideo");
     const brokenScreen = $("brokenScreen");
@@ -1582,6 +1587,15 @@
     onValue(roomRef, snapshot => {
       const state = snapshot.val() || {};
       const mode = state.mode || "dead";
+      const section = Number(state.section || 1);
+      phaseIndicator.classList.toggle("visible", ["ready","waiting","playing"].includes(mode));
+      phaseIndicator.innerHTML = state.clearRecord
+        ? `<strong>CLEAR ${state.clearRecord.display || "--:--"}</strong>`
+        : state.awaitingReasonApproval
+          ? `<strong>FINAL CHECK</strong>`
+          : state.section1Cleared && section === 1
+            ? `<strong>SECTION 1 CLEAR</strong>`
+            : `<strong>SECTION ${section}</strong>`;
 
       if (mode !== "broken") showScreen(mode, state.ngStage || "none");
       else {
