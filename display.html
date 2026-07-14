@@ -1136,7 +1136,7 @@
         `失敗: <strong class="audio-ng">${ng}</strong>　` +
         `読込中: <strong class="audio-loading">${loading}</strong>`;
 
-      closeAudioSetup.disabled = !(ok === total && audio.ctx?.state === "running");
+      closeAudioSetup.disabled = !(audio.ctx?.state === "running");
     }
 
     async function setupAudio(force = true) {
@@ -1162,7 +1162,14 @@
         });
 
         if (!audio.ready) {
-          showError("不足しているMP3があります。赤い×のファイル名と配置を確認してください。");
+          showError("一部のMP3を読み込めませんでした。画面は使用できます。赤い×のファイルだけ配置を確認してください。");
+        }
+
+        // 音声許可が取れた時点でゲーム画面へ進める。
+        // 全ファイルが揃っていなくても、入力・判定操作を塞がない。
+        if (audio.ctx?.state === "running") {
+          audioSetup.classList.add("hidden");
+          syncAudioUnlockButton();
         }
       } catch (error) {
         showError(`音声セットアップ失敗：${error.message}`);
@@ -1460,7 +1467,6 @@
       lastCustomEffectCommandId = command.id;
 
       const raw = String(command.filename || "").trim();
-      if (!raw) return;
       const safeName = raw.replace(/^audio\//, "").replace(/[^a-zA-Z0-9._-]/g, "");
       if (!safeName || !safeName.toLowerCase().endsWith(".mp3")) {
         await update(roomRef, { customEffectCommand: null });
@@ -1468,18 +1474,37 @@
         return;
       }
 
+      const src = `audio/${safeName}?v=${Date.now()}`;
       try {
-        await audio.ensureContext();
-        const response = await fetch(`audio/${safeName}?v=${Date.now()}`, { cache: "no-store" });
+        clearError();
+        if (!audio.ctx) throw new Error("AudioContext非対応");
+        if (audio.ctx.state !== "running") await audio.ctx.resume();
+
+        const response = await fetch(src, { cache: "no-store" });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const buffer = await audio.ctx.decodeAudioData(await response.arrayBuffer());
+        const arrayBuffer = await response.arrayBuffer();
+        const buffer = await audio.ctx.decodeAudioData(arrayBuffer.slice(0));
         const source = audio.ctx.createBufferSource();
         source.buffer = buffer;
         source.connect(audio.effectGain);
-        source.start(0);
-        await new Promise(resolve => { source.onended = resolve; });
-      } catch (error) {
-        showError(`効果音 ${safeName} の再生に失敗しました：${error.message}`);
+        await new Promise((resolve, reject) => {
+          source.onended = resolve;
+          try { source.start(0); } catch (e) { reject(e); }
+        });
+      } catch (webAudioError) {
+        // Web Audioで失敗した場合は通常のaudio要素でも再試行する。
+        try {
+          await new Promise((resolve, reject) => {
+            const player = new Audio(src);
+            player.preload = "auto";
+            player.volume = Math.max(0, Math.min(1, requestedEffectVolume));
+            player.onended = resolve;
+            player.onerror = () => reject(new Error("MP3を読み込めません"));
+            player.play().catch(reject);
+          });
+        } catch (htmlAudioError) {
+          showError(`効果音 ${safeName} の再生に失敗しました。audio/${safeName} の配置と音声許可を確認してください。`);
+        }
       } finally {
         await update(roomRef, { customEffectCommand: null });
       }
