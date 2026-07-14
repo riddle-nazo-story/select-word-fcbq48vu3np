@@ -277,17 +277,34 @@
 
     .clear-time-overlay {
       position: absolute;
+      inset: 0;
       z-index: 2;
-      top: 52.2%;
-      left: 50%;
-      transform: translate(-50%, -50%);
+      pointer-events: none;
       color: #fff;
       font-family: "Times New Roman", "Yu Mincho", serif;
-      font-size: clamp(48px, 8.5vw, 100px);
+      font-size: clamp(44px, 7.4vw, 86px);
       font-weight: 500;
-      letter-spacing: .06em;
+      letter-spacing: .02em;
       white-space: nowrap;
-      text-shadow: 0 0 8px #fff, 0 0 24px rgba(255,255,255,.45), 3px 3px 0 #111;
+      text-shadow: 0 0 8px #fff, 0 0 20px rgba(255,255,255,.42), 3px 3px 0 #111;
+    }
+
+    .clear-time-part {
+      position: absolute;
+      top: 52.85%;
+      transform: translateY(-50%);
+      min-width: 2.2ch;
+      line-height: 1;
+    }
+
+    .clear-time-minute {
+      right: 52.7%;
+      text-align: right;
+    }
+
+    .clear-time-second {
+      left: 52.7%;
+      text-align: left;
     }
 
     @media (orientation: landscape) {
@@ -577,6 +594,115 @@
       color: #faa;
       font-size: 13px;
     }
+
+
+    /* NG行動・解答ルール表示 */
+    .ng-screen {
+      position: fixed;
+      inset: 0;
+      z-index: 190;
+      display: none;
+      place-items: center;
+      overflow: hidden;
+      padding: 7vh 6vw;
+      background:
+        radial-gradient(circle at 50% 40%, rgba(38,49,60,.34), transparent 52%),
+        #030405;
+    }
+    .ng-screen.active { display: grid; }
+    .ng-panel {
+      width: min(900px, 92vw);
+      display: grid;
+      gap: clamp(18px, 3vh, 32px);
+    }
+    .ng-heading {
+      margin: 0;
+      color: #ff3b3b;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: clamp(18px, 3vw, 34px);
+      letter-spacing: .28em;
+      text-align: center;
+      text-shadow: 0 0 18px rgba(255,40,40,.55);
+    }
+    .ng-card {
+      position: relative;
+      min-height: clamp(150px, 24vh, 230px);
+      display: grid;
+      place-items: center;
+      padding: 34px 28px;
+      overflow: hidden;
+      border: 1px solid rgba(255,255,255,.26);
+      background: rgba(8,10,12,.92);
+      clip-path: polygon(20px 0,100% 0,100% calc(100% - 20px),calc(100% - 20px) 100%,0 100%,0 20px);
+      box-shadow: inset 0 0 0 1px rgba(255,60,60,.12), 0 0 35px rgba(255,0,0,.10);
+    }
+    .ng-card::before,
+    .ng-card::after {
+      content: "";
+      position: absolute;
+      z-index: 4;
+      pointer-events: none;
+    }
+    .ng-card::before {
+      inset: 0;
+      background: repeating-linear-gradient(0deg, transparent 0 3px, rgba(255,255,255,.11) 4px 5px);
+      opacity: .3;
+    }
+    .ng-card::after {
+      left: 4%; right: 4%; top: 14px; height: 2px;
+      background: #ff3434;
+      box-shadow: 0 0 14px #ff3434;
+    }
+    .ng-label {
+      position: absolute;
+      top: 16px;
+      left: 20px;
+      z-index: 5;
+      color: #ff7777;
+      font: 700 clamp(11px,1.5vw,15px)/1 ui-monospace,monospace;
+      letter-spacing: .2em;
+    }
+    .ng-text {
+      position: relative;
+      z-index: 2;
+      color: #fff;
+      font-family: "Yu Mincho", "Hiragino Mincho ProN", serif;
+      font-size: clamp(26px, 5vw, 52px);
+      font-weight: 700;
+      line-height: 1.55;
+      letter-spacing: .08em;
+      text-align: center;
+      text-shadow: 0 0 18px rgba(255,255,255,.2);
+    }
+    .ng-card.masked .ng-text { opacity: 0; }
+    .ng-mask {
+      position: absolute;
+      inset: 0;
+      z-index: 3;
+      display: grid;
+      place-items: center;
+      background:
+        repeating-linear-gradient(0deg, rgba(255,255,255,.14) 0 2px, transparent 2px 6px),
+        repeating-linear-gradient(90deg, rgba(255,0,0,.10) 0 4px, rgba(0,170,255,.10) 4px 8px),
+        #090a0b;
+      color: #b8bec4;
+      font: 800 clamp(18px,3vw,32px)/1 ui-monospace,monospace;
+      letter-spacing: .22em;
+      animation: ngNoise .12s steps(2) infinite;
+    }
+    .ng-mask::after { content: "DATA MASKED"; }
+    .ng-card.revealing .ng-mask { animation: ngReveal .95s steps(12) forwards, ngNoise .12s steps(2) infinite; }
+    .ng-card.revealing .ng-text { animation: ngTextReveal .95s .12s both; }
+    .ng-card.revealed .ng-mask { display:none; }
+    .ng-rule-card { display:none; border-color: rgba(65,180,255,.55); box-shadow: inset 0 0 0 1px rgba(65,180,255,.12), 0 0 35px rgba(0,140,255,.13); }
+    .ng-rule-card.visible { display:grid; animation: ruleAppear .65s cubic-bezier(.2,.8,.2,1) both; }
+    .ng-rule-card::after { background:#55c8ff; box-shadow:0 0 14px #55c8ff; }
+    .ng-rule-card .ng-label { color:#8edcff; }
+    @keyframes ngNoise { 0%{transform:translate(0,0)} 25%{transform:translate(2%,-1%)} 50%{transform:translate(-2%,2%)} 75%{transform:translate(1%,-2%)} }
+    @keyframes ngReveal { 0%{clip-path:inset(0 0 0 0);opacity:1} 75%{clip-path:inset(0 0 78% 0);opacity:.9} 100%{clip-path:inset(0 0 100% 0);opacity:0} }
+    @keyframes ngTextReveal { 0%{opacity:0;filter:blur(12px);transform:scale(.96)} 60%{opacity:.55;filter:blur(3px)} 100%{opacity:1;filter:blur(0);transform:scale(1)} }
+    @keyframes ruleAppear { from{opacity:0;transform:translateY(22px) scale(.98)} to{opacity:1;transform:none} }
+
   </style>
 </head>
 <body>
@@ -613,11 +739,31 @@
 
   <section id="successScreen" class="manual-screen">
     <img class="result-poster" src="images/success.png" alt="脱出成功">
-    <div id="clearTimeOverlay" class="clear-time-overlay">--:--</div>
+    <div id="clearTimeOverlay" class="clear-time-overlay" aria-label="クリア時間">
+      <span id="clearTimeMinute" class="clear-time-part clear-time-minute">--</span>
+      <span id="clearTimeSecond" class="clear-time-part clear-time-second">--</span>
+    </div>
   </section>
 
   <section id="failureScreen" class="manual-screen">
     <img class="result-poster" src="images/failed.png" alt="脱出失敗">
+  </section>
+
+
+
+  <section id="ngScreen" class="ng-screen" aria-live="polite">
+    <div class="ng-panel">
+      <h2 class="ng-heading">PROHIBITED ACTION DETECTED</h2>
+      <div id="ngActionCard" class="ng-card masked">
+        <div class="ng-label">NG ACTION</div>
+        <div class="ng-text">黒解答ボードに黒ペンで書く</div>
+        <div class="ng-mask"></div>
+      </div>
+      <div id="answerRuleCard" class="ng-card ng-rule-card">
+        <div class="ng-label">ANSWER RULE</div>
+        <div class="ng-text">解答ボードを使い解答する</div>
+      </div>
+    </div>
   </section>
 
   <button id="audioUnlock" class="audio-unlock hidden" type="button">音声設定を開く</button>
@@ -697,7 +843,12 @@
     const attentionScreen = $("attentionScreen");
     const successScreen = $("successScreen");
     const failureScreen = $("failureScreen");
+    const ngScreen = $("ngScreen");
+    const ngActionCard = $("ngActionCard");
+    const answerRuleCard = $("answerRuleCard");
     const clearTimeOverlay = $("clearTimeOverlay");
+    const clearTimeMinute = $("clearTimeMinute");
+    const clearTimeSecond = $("clearTimeSecond");
     const status = $("status");
     const errorBox = $("error");
 
@@ -718,6 +869,7 @@
     let lastVideoCommandId = "";
     let lastStopVideoCommandId = "";
     let lastAudioTestCommandId = "";
+    let lastCustomEffectCommandId = "";
     let isPlayingResult = false;
     let requestedBgmMode = "none";
     let requestedBgmVolume = 0.7;
@@ -1074,8 +1226,23 @@
       attentionScreen.classList.toggle("active", mode === "attention");
       successScreen.classList.toggle("active", mode === "success");
       failureScreen.classList.toggle("active", mode === "failure");
+      ngScreen.classList.toggle("active", ["ngHidden", "ngReveal", "ngRule"].includes(mode));
 
-      const isManualView = ["attention", "success", "failure"].includes(mode);
+      if (mode === "ngHidden") {
+        ngActionCard.className = "ng-card masked";
+        answerRuleCard.className = "ng-card ng-rule-card";
+      } else if (mode === "ngReveal") {
+        if (!ngActionCard.classList.contains("revealed")) {
+          ngActionCard.className = "ng-card revealing";
+          setTimeout(() => { if (currentMode === "ngReveal" || currentMode === "ngRule") ngActionCard.className = "ng-card revealed"; }, 1050);
+        }
+        answerRuleCard.className = "ng-card ng-rule-card";
+      } else if (mode === "ngRule") {
+        ngActionCard.className = "ng-card revealed";
+        answerRuleCard.className = "ng-card ng-rule-card visible";
+      }
+
+      const isManualView = ["attention", "success", "failure", "ngHidden", "ngReveal", "ngRule"].includes(mode);
       document.body.classList.toggle("manual-view", isManualView);
 
       const waiting = mode === "waiting";
@@ -1275,6 +1442,36 @@
       update(roomRef, { stopVideoCommand: null }).catch(console.error);
     }
 
+    async function runCustomEffect(command) {
+      if (!command?.id || command.id === lastCustomEffectCommandId) return;
+      lastCustomEffectCommandId = command.id;
+
+      const raw = String(command.filename || "").trim();
+      if (!raw) return;
+      const safeName = raw.replace(/^audio\//, "").replace(/[^a-zA-Z0-9._-]/g, "");
+      if (!safeName || !safeName.toLowerCase().endsWith(".mp3")) {
+        await update(roomRef, { customEffectCommand: null });
+        showError("効果音のファイル名が不正です。");
+        return;
+      }
+
+      try {
+        await audio.ensureContext();
+        const response = await fetch(`audio/${safeName}?v=${Date.now()}`, { cache: "no-store" });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const buffer = await audio.ctx.decodeAudioData(await response.arrayBuffer());
+        const source = audio.ctx.createBufferSource();
+        source.buffer = buffer;
+        source.connect(audio.effectGain);
+        source.start(0);
+        await new Promise(resolve => { source.onended = resolve; });
+      } catch (error) {
+        showError(`効果音 ${safeName} の再生に失敗しました：${error.message}`);
+      } finally {
+        await update(roomRef, { customEffectCommand: null });
+      }
+    }
+
     async function runAudioTest(command) {
       if (!command?.id || command.id === lastAudioTestCommandId) return;
       lastAudioTestCommandId = command.id;
@@ -1385,7 +1582,11 @@
       }
 
       brokenScreen.classList.toggle("active", mode === "broken");
-      clearTimeOverlay.textContent = state.clearRecord?.display || "--:--";
+      const clearDisplay = state.clearRecord?.display || "--:--";
+      const [clearMinute = "--", clearSecond = "--"] = clearDisplay.split(":");
+      clearTimeMinute.textContent = clearMinute;
+      clearTimeSecond.textContent = clearSecond;
+      clearTimeOverlay.setAttribute("aria-label", `クリア時間 ${clearMinute}分${clearSecond}秒`);
 
       currentTimerState = state.timer || { status: "idle", remainingSeconds: GAME_SECONDS };
       updateTimer();
@@ -1400,6 +1601,7 @@
       if (state.videoCommand) playVideoCommand(state.videoCommand);
       if (state.stopVideoCommand) stopVideoPlayback(state.stopVideoCommand);
       if (state.audioTestCommand) runAudioTest(state.audioTestCommand);
+      if (state.customEffectCommand) runCustomEffect(state.customEffectCommand);
 
       status.textContent =
         `ROOM: ${roomId} / ${mode} / AUDIO: ${audio.ctx?.state || "unsupported"} / ${audio.buffers.size}/${Object.keys(AUDIO_FILES).length}`;
