@@ -580,12 +580,31 @@ document.getElementById("approveFinalAnswer").addEventListener("click", async ()
 });
 
 document.getElementById("rejectFinalAnswer").addEventListener("click", async () => {
+  if (!state.awaitingReasonApproval) return;
+
   const remaining = getCurrentRemainingSeconds();
+
+  // 理由が不十分だったことを参加者側へ知らせるため、不正解音を再生する。
+  await sendCustomMp3("incorrect.mp3");
+
   await update(roomRef,{
-    awaitingReasonApproval:false,mode:"ready",requestAt:null,result:null,
-    timer:{status:"running",startedAt:Date.now(),durationSeconds:remaining,remainingSeconds:remaining}
+    awaitingReasonApproval:false,
+    mode:"ready",
+    requestAt:null,
+    result:null,
+    timer:{
+      status:"running",
+      startedAt:Date.now(),
+      durationSeconds:remaining,
+      remainingSeconds:remaining
+    }
   });
-  setMessage(document.getElementById("section2Message"),"理由が不十分のため、セクション2を続行します。タイマーを再開しました。",true);
+
+  setMessage(
+    document.getElementById("section2Message"),
+    "理由が不十分のため、不正解音を流してセクション2を続行します。タイマーを再開しました。",
+    true
+  );
 });
 
 document.getElementById("playCustomEffect").addEventListener("click", async () => {
