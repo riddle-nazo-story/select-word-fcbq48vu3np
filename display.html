@@ -727,7 +727,7 @@
   <section id="videoOverlay" class="video-overlay">
     <div class="video-shell">
       <div class="video-title">INCOMING TRANSMISSION</div>
-      <video id="eventVideo" playsinline></video>
+      <video id="eventVideo" playsinline webkit-playsinline preload="auto"></video>
     </div>
   </section>
 
@@ -1378,21 +1378,45 @@
       secretVideoPlaying = true;
 
       try {
-        await playEffectSafe("incoming");
+        clearError();
 
+        eventVideo.pause();
         eventVideo.src = SECRET_VIDEO_SRC;
-        eventVideo.load();
+        eventVideo.playsInline = true;
+        eventVideo.setAttribute("playsinline", "");
+        eventVideo.setAttribute("webkit-playsinline", "");
+        eventVideo.preload = "auto";
         eventVideo.currentTime = 0;
         videoOverlay.classList.add("active");
 
-        await eventVideo.play();
+        // 10回目のタップ操作が有効なうちに、動画再生を先に開始する。
+        // incoming.mp3の終了を待ってからvideo.play()すると、Safari等で
+        // ユーザー操作による再生と認識されず拒否されることがある。
+        const videoPlayPromise = eventVideo.play();
 
-        await new Promise(resolve => {
+        // 通信音は待たずに同時再生する。
+        playEffectSafe("incoming").catch(audioError => {
+          console.warn("隠し通信音の再生に失敗しました:", audioError);
+        });
+
+        await videoPlayPromise;
+
+        await new Promise((resolve, reject) => {
           eventVideo.addEventListener("ended", resolve, { once: true });
-          eventVideo.addEventListener("error", resolve, { once: true });
+          eventVideo.addEventListener("error", () => {
+            const mediaError = eventVideo.error;
+            reject(new Error(
+              mediaError
+                ? `動画エラーコード ${mediaError.code}`
+                : "動画ファイルを読み込めません"
+            ));
+          }, { once: true });
         });
       } catch (error) {
-        showError(`隠し通信の再生に失敗しました：${error.message}`);
+        console.error("隠し通信の動画再生エラー:", error);
+        showError(
+          `隠し通信の再生に失敗しました：${error.name || "Error"} / ${error.message || "詳細不明"}`
+        );
       } finally {
         eventVideo.pause();
         eventVideo.removeAttribute("src");
