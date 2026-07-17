@@ -717,7 +717,7 @@
           <div class="ng-mask" aria-hidden="true"></div>
         </div>
         <div id="answerRuleCard" class="ng-card ng-rule-card">
-          <div class="ng-label">NG行動2</div>
+          <div class="ng-label">解答ルール</div>
           <div class="ng-text">解答ボードを用いて解答する</div>
         </div>
       </div>
@@ -727,7 +727,7 @@
   <section id="videoOverlay" class="video-overlay">
     <div class="video-shell">
       <div class="video-title">INCOMING TRANSMISSION</div>
-      <video id="eventVideo" playsinline></video>
+      <video id="eventVideo" playsinline webkit-playsinline preload="auto"></video>
     </div>
   </section>
 
@@ -1395,21 +1395,38 @@
       secretVideoPlaying = true;
 
       try {
-        await playEffectSafe("incoming");
-
+        clearError();
+        eventVideo.pause();
         eventVideo.src = SECRET_VIDEO_SRC;
-        eventVideo.load();
         eventVideo.currentTime = 0;
+        eventVideo.playsInline = true;
+        eventVideo.setAttribute("playsinline", "");
+        eventVideo.setAttribute("webkit-playsinline", "");
         videoOverlay.classList.add("active");
 
-        await eventVideo.play();
+        // 10回目のタップ操作が有効なうちに、動画を先に再生開始する。
+        // 通信音の終了を待つと、iPhone/iPadで自動再生扱いになり拒否されることがある。
+        const videoPlayPromise = eventVideo.play();
 
-        await new Promise(resolve => {
+        // 通信音は待たずに同時再生。失敗しても動画は継続する。
+        playEffectSafe("incoming").catch(audioError => {
+          console.warn("隠し通信音の再生に失敗しました", audioError);
+        });
+
+        await videoPlayPromise;
+
+        await new Promise((resolve, reject) => {
           eventVideo.addEventListener("ended", resolve, { once: true });
-          eventVideo.addEventListener("error", resolve, { once: true });
+          eventVideo.addEventListener("error", () => {
+            const mediaError = eventVideo.error;
+            reject(new Error(mediaError
+              ? `動画読込エラー（code: ${mediaError.code}）`
+              : "動画ファイルを読み込めません"));
+          }, { once: true });
         });
       } catch (error) {
-        showError(`隠し通信の再生に失敗しました：${error.message}`);
+        console.error("隠し通信の動画再生エラー", error);
+        showError(`隠し通信の再生に失敗しました：${error.name || "Error"} / ${error.message || "詳細不明"}`);
       } finally {
         eventVideo.pause();
         eventVideo.removeAttribute("src");
