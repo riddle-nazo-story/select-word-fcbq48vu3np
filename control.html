@@ -28,8 +28,7 @@
     button.danger{border-color:#633;color:#ffb0b0}
     button:disabled{opacity:.4;cursor:default}
     .request{display:none;border-color:#7b6814;box-shadow:0 0 0 1px rgba(255,212,0,.15) inset}
-    .request.active{display:block;position:relative;animation:requestFlash .7s ease-out}
-    @keyframes requestFlash{from{box-shadow:0 0 0 5px rgba(255,212,0,.45)}to{box-shadow:0 0 0 1px rgba(255,212,0,.15) inset}}
+    .request.active{display:block}
     .notice{margin-bottom:13px;color:var(--yellow);font-weight:700}
     .phase-box{margin-top:12px;padding:14px;border:1px solid #4a4a4a;border-radius:12px;background:#0d0d0d;line-height:1.7}
     .phase-box strong{display:block;color:var(--yellow);font-size:18px}
@@ -233,11 +232,32 @@
       <button id="showReady2">判定ボタン画面</button>
     </div>
   </section>
+
+  <section class="panel critical-panel">
+    <h2 class="panel-title">リアルタイムマイク配信</h2>
+    <div class="current">運営スマホのマイク音声を、display端末へリアルタイム送信します。</div>
+    <div class="grid2" style="margin-top:12px">
+      <button id="startLiveMic" class="primary">マイク配信を開始</button>
+      <button id="stopLiveMic" class="danger" disabled>マイク配信を終了</button>
+      <button id="toggleLiveMicMute" disabled>マイクをミュート</button>
+      <button id="reconnectLiveMic" disabled>再接続</button>
+    </div>
+    <div style="margin-top:16px">
+      <label for="liveMicVolume">display側の再生音量</label>
+      <div class="volume-row">
+        <input id="liveMicVolume" type="range" min="0" max="100" value="100">
+        <div id="liveMicVolumeValue" class="volume-value">100%</div>
+      </div>
+    </div>
+    <div id="liveMicStatus" class="audio-health">状態：停止中</div>
+    <div class="message">HTTPS上で使用してください。運営スマホとdisplay端末を近づけるとハウリングするため、距離を取ってください。</div>
+  </section>
+
 </main>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
-import { getDatabase, ref, onValue, update } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-database.js";
+import { getDatabase, ref, onValue, update, set, push, remove, onChildAdded } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-database.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyA-f7Dplo95j3NYBCXHSxEBGhFXgAa35lU",
@@ -254,6 +274,19 @@ const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 const roomId = new URLSearchParams(location.search).get("room") || "main";
 const roomRef = ref(db, `selectWord/rooms/${roomId}`);
+const liveAudioRef = ref(db, `selectWord/rooms/${roomId}/liveAudio`);
+const rtcConfig = {
+  iceServers: [
+    { urls: "stun:stun.l.google.com:19302" },
+    { urls: "stun:stun1.l.google.com:19302" }
+  ]
+};
+let liveMicPc = null;
+let liveMicStream = null;
+let liveMicMuted = false;
+let liveMicSessionId = null;
+let liveMicUnsubscribers = [];
+
 
 const roomText = document.getElementById("roomText");
 const answerInput = document.getElementById("answerInput");
@@ -316,6 +349,154 @@ function updateTimerReadout(){
   }
   timerReadout.textContent=fmt(remaining);
 }
+
+
+const startLiveMicButton = document.getElementById("startLiveMic");
+const stopLiveMicButton = document.getElementById("stopLiveMic");
+const toggleLiveMicMuteButton = document.getElementById("toggleLiveMicMute");
+const reconnectLiveMicButton = document.getElementById("reconnectLiveMic");
+const liveMicVolume = document.getElementById("liveMicVolume");
+const liveMicVolumeValue = document.getElementById("liveMicVolumeValue");
+const liveMicStatus = document.getElementById("liveMicStatus");
+
+function setLiveMicStatus(text, isError = false) {
+  liveMicStatus.innerHTML = `状態：<strong style="color:${isError ? '#ffaaaa' : '#aef0bf'}">${text}</strong>`;
+}
+
+function clearLiveMicListeners() {
+  for (const unsubscribe of liveMicUnsubscribers) {
+    try { unsubscribe(); } catch (_) {}
+  }
+  liveMicUnsubscribers = [];
+}
+
+async function stopLiveMic({ notifyDisplay = true } = {}) {
+  clearLiveMicListeners();
+  if (liveMicPc) {
+    try { liveMicPc.onicecandidate = null; liveMicPc.close(); } catch (_) {}
+  }
+  liveMicPc = null;
+  if (liveMicStream) {
+    liveMicStream.getTracks().forEach(track => track.stop());
+  }
+  liveMicStream = null;
+  liveMicMuted = false;
+  toggleLiveMicMuteButton.textContent = "マイクをミュート";
+  startLiveMicButton.disabled = false;
+  stopLiveMicButton.disabled = true;
+  toggleLiveMicMuteButton.disabled = true;
+  reconnectLiveMicButton.disabled = true;
+  setLiveMicStatus("停止中");
+  if (notifyDisplay) {
+    await update(liveAudioRef, {
+      active: false,
+      stoppedAt: Date.now(),
+      commandId: `${Date.now()}-stop`
+    }).catch(console.error);
+  }
+}
+
+async function startLiveMic() {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    setLiveMicStatus("このブラウザはマイク配信に対応していません", true);
+    return;
+  }
+  startLiveMicButton.disabled = true;
+  setLiveMicStatus("マイク許可を待っています…");
+  try {
+    await stopLiveMic({ notifyDisplay: false });
+    startLiveMicButton.disabled = true;
+    liveMicSessionId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    const sessionRef = ref(db, `selectWord/rooms/${roomId}/liveAudio/session`);
+    await remove(sessionRef);
+
+    liveMicStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+        channelCount: 1
+      },
+      video: false
+    });
+
+    liveMicPc = new RTCPeerConnection(rtcConfig);
+    liveMicStream.getAudioTracks().forEach(track => liveMicPc.addTrack(track, liveMicStream));
+
+    liveMicPc.onconnectionstatechange = () => {
+      const state = liveMicPc?.connectionState || "closed";
+      const labels = {
+        new: "接続準備中", connecting: "displayへ接続中…", connected: "配信中",
+        disconnected: "接続が一時中断", failed: "接続失敗", closed: "停止中"
+      };
+      setLiveMicStatus(labels[state] || state, state === "failed");
+    };
+
+    liveMicPc.onicecandidate = async event => {
+      if (!event.candidate) return;
+      await push(ref(db, `selectWord/rooms/${roomId}/liveAudio/session/controlCandidates`), event.candidate.toJSON());
+    };
+
+    const answerRef = ref(db, `selectWord/rooms/${roomId}/liveAudio/session/answer`);
+    const unsubAnswer = onValue(answerRef, async snapshot => {
+      const answer = snapshot.val();
+      if (!answer || !liveMicPc || liveMicPc.currentRemoteDescription) return;
+      try { await liveMicPc.setRemoteDescription(answer); }
+      catch (error) { console.error("回答SDP設定失敗", error); }
+    });
+    liveMicUnsubscribers.push(unsubAnswer);
+
+    const displayCandidatesRef = ref(db, `selectWord/rooms/${roomId}/liveAudio/session/displayCandidates`);
+    const unsubCandidates = onChildAdded(displayCandidatesRef, async snapshot => {
+      if (!liveMicPc) return;
+      try { await liveMicPc.addIceCandidate(snapshot.val()); }
+      catch (error) { console.warn("display ICE候補追加失敗", error); }
+    });
+    liveMicUnsubscribers.push(unsubCandidates);
+
+    const offer = await liveMicPc.createOffer({ offerToReceiveAudio: false });
+    await liveMicPc.setLocalDescription(offer);
+    await set(ref(db, `selectWord/rooms/${roomId}/liveAudio/session/offer`), {
+      type: offer.type, sdp: offer.sdp
+    });
+    await update(liveAudioRef, {
+      active: true,
+      sessionId: liveMicSessionId,
+      volume: Number(liveMicVolume.value) / 100,
+      startedAt: Date.now(),
+      commandId: `${Date.now()}-start`
+    });
+
+    stopLiveMicButton.disabled = false;
+    toggleLiveMicMuteButton.disabled = false;
+    reconnectLiveMicButton.disabled = false;
+    setLiveMicStatus("displayの接続待ち…");
+  } catch (error) {
+    console.error("マイク配信開始失敗", error);
+    await stopLiveMic({ notifyDisplay: true });
+    setLiveMicStatus(`開始失敗：${error.message || error.name}`, true);
+  }
+}
+
+startLiveMicButton.addEventListener("click", startLiveMic);
+stopLiveMicButton.addEventListener("click", () => stopLiveMic());
+reconnectLiveMicButton.addEventListener("click", startLiveMic);
+toggleLiveMicMuteButton.addEventListener("click", async () => {
+  if (!liveMicStream) return;
+  liveMicMuted = !liveMicMuted;
+  liveMicStream.getAudioTracks().forEach(track => { track.enabled = !liveMicMuted; });
+  toggleLiveMicMuteButton.textContent = liveMicMuted ? "ミュート解除" : "マイクをミュート";
+  setLiveMicStatus(liveMicMuted ? "配信中（ミュート）" : "配信中");
+  await update(liveAudioRef, { muted: liveMicMuted, updatedAt: Date.now() });
+});
+liveMicVolume.addEventListener("input", async () => {
+  const value = Number(liveMicVolume.value);
+  liveMicVolumeValue.textContent = `${value}%`;
+  await update(liveAudioRef, { volume: value / 100, updatedAt: Date.now() });
+});
+window.addEventListener("beforeunload", () => {
+  if (liveMicStream) liveMicStream.getTracks().forEach(track => track.stop());
+});
 
 onValue(roomRef,snapshot=>{
   state=snapshot.val()||{};
@@ -381,12 +562,7 @@ onValue(roomRef,snapshot=>{
   document.getElementById("recordCard").classList.toggle("active", !!clearRecord);
   document.getElementById("recordCard").querySelector("strong").textContent = clearRecord?.display || "未記録";
 
-  if(state.mode==="waiting") {
-    setTimeout(() => {
-      requestPanel.scrollIntoView({ behavior: "smooth", block: "center" });
-      wordInput.focus();
-    }, 80);
-  }
+  if(state.mode==="waiting")setTimeout(()=>wordInput.focus(),50);
   updateTimerReadout();
   if(!timerTicker)timerTicker=setInterval(updateTimerReadout,250);
 });
@@ -580,31 +756,12 @@ document.getElementById("approveFinalAnswer").addEventListener("click", async ()
 });
 
 document.getElementById("rejectFinalAnswer").addEventListener("click", async () => {
-  if (!state.awaitingReasonApproval) return;
-
   const remaining = getCurrentRemainingSeconds();
-
-  // 理由が不十分だったことを参加者側へ知らせるため、不正解音を再生する。
-  await sendCustomMp3("incorrect.mp3");
-
   await update(roomRef,{
-    awaitingReasonApproval:false,
-    mode:"ready",
-    requestAt:null,
-    result:null,
-    timer:{
-      status:"running",
-      startedAt:Date.now(),
-      durationSeconds:remaining,
-      remainingSeconds:remaining
-    }
+    awaitingReasonApproval:false,mode:"ready",requestAt:null,result:null,
+    timer:{status:"running",startedAt:Date.now(),durationSeconds:remaining,remainingSeconds:remaining}
   });
-
-  setMessage(
-    document.getElementById("section2Message"),
-    "理由が不十分のため、不正解音を流してセクション2を続行します。タイマーを再開しました。",
-    true
-  );
+  setMessage(document.getElementById("section2Message"),"理由が不十分のため、セクション2を続行します。タイマーを再開しました。",true);
 });
 
 document.getElementById("playCustomEffect").addEventListener("click", async () => {
