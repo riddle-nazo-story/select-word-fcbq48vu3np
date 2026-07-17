@@ -727,9 +727,12 @@
   <section id="videoOverlay" class="video-overlay">
     <div class="video-shell">
       <div class="video-title">INCOMING TRANSMISSION</div>
-      <video id="eventVideo" playsinline webkit-playsinline preload="auto"></video>
+      <video id="eventVideo" playsinline></video>
     </div>
   </section>
+
+  <audio id="liveRemoteAudio" autoplay playsinline></audio>
+  <button id="liveAudioUnlock" class="audio-unlock hidden" type="button" style="bottom:82px">配信音声を有効化</button>
 
   <section id="brokenScreen" class="broken">
     <div class="broken-message">
@@ -784,7 +787,7 @@
 
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-app.js";
-    import { getDatabase, ref, onValue, update } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-database.js";
+    import { getDatabase, ref, onValue, update, set, push, remove, onChildAdded } from "https://www.gstatic.com/firebasejs/12.1.0/firebase-database.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyA-f7Dplo95j3NYBCXHSxEBGhFXgAa35lU",
@@ -820,6 +823,17 @@
     const db = getDatabase(app);
     const roomId = new URLSearchParams(location.search).get("room") || "main";
     const roomRef = ref(db, `selectWord/rooms/${roomId}`);
+    const liveAudioRef = ref(db, `selectWord/rooms/${roomId}/liveAudio`);
+    const rtcConfig = {
+      iceServers: [
+        { urls: "stun:stun.l.google.com:19302" },
+        { urls: "stun:stun1.l.google.com:19302" }
+      ]
+    };
+    let liveAudioPc = null;
+    let liveAudioSessionId = null;
+    let liveAudioUnsubscribers = [];
+
 
     const $ = id => document.getElementById(id);
     const deadScreen = $("deadScreen");
@@ -842,6 +856,9 @@
     const clearTimeSecond = $("clearTimeSecond");
     const status = $("status");
     const errorBox = $("error");
+    const liveRemoteAudio = $("liveRemoteAudio");
+    const liveAudioUnlock = $("liveAudioUnlock");
+
 
     const audioSetup = $("audioSetup");
     const audioUnlock = $("audioUnlock");
@@ -1378,45 +1395,21 @@
       secretVideoPlaying = true;
 
       try {
-        clearError();
+        await playEffectSafe("incoming");
 
-        eventVideo.pause();
         eventVideo.src = SECRET_VIDEO_SRC;
-        eventVideo.playsInline = true;
-        eventVideo.setAttribute("playsinline", "");
-        eventVideo.setAttribute("webkit-playsinline", "");
-        eventVideo.preload = "auto";
+        eventVideo.load();
         eventVideo.currentTime = 0;
         videoOverlay.classList.add("active");
 
-        // 10回目のタップ操作が有効なうちに、動画再生を先に開始する。
-        // incoming.mp3の終了を待ってからvideo.play()すると、Safari等で
-        // ユーザー操作による再生と認識されず拒否されることがある。
-        const videoPlayPromise = eventVideo.play();
+        await eventVideo.play();
 
-        // 通信音は待たずに同時再生する。
-        playEffectSafe("incoming").catch(audioError => {
-          console.warn("隠し通信音の再生に失敗しました:", audioError);
-        });
-
-        await videoPlayPromise;
-
-        await new Promise((resolve, reject) => {
+        await new Promise(resolve => {
           eventVideo.addEventListener("ended", resolve, { once: true });
-          eventVideo.addEventListener("error", () => {
-            const mediaError = eventVideo.error;
-            reject(new Error(
-              mediaError
-                ? `動画エラーコード ${mediaError.code}`
-                : "動画ファイルを読み込めません"
-            ));
-          }, { once: true });
+          eventVideo.addEventListener("error", resolve, { once: true });
         });
       } catch (error) {
-        console.error("隠し通信の動画再生エラー:", error);
-        showError(
-          `隠し通信の再生に失敗しました：${error.name || "Error"} / ${error.message || "詳細不明"}`
-        );
+        showError(`隠し通信の再生に失敗しました：${error.message}`);
       } finally {
         eventVideo.pause();
         eventVideo.removeAttribute("src");
@@ -1631,6 +1624,98 @@
         waitingText.textContent = "";
         await resumeBgmAfterJudgement();
       }
+    });
+
+
+    function clearLiveAudioListeners() {
+      for (const unsubscribe of liveAudioUnsubscribers) {
+        try { unsubscribe(); } catch (_) {}
+      }
+      liveAudioUnsubscribers = [];
+    }
+
+    async function stopLiveAudioReceiver() {
+      clearLiveAudioListeners();
+      if (liveAudioPc) {
+        try { liveAudioPc.ontrack = null; liveAudioPc.onicecandidate = null; liveAudioPc.close(); } catch (_) {}
+      }
+      liveAudioPc = null;
+      liveAudioSessionId = null;
+      liveRemoteAudio.srcObject = null;
+      liveAudioUnlock.classList.add("hidden");
+    }
+
+    async function enableRemoteAudio() {
+      try {
+        await liveRemoteAudio.play();
+        liveAudioUnlock.classList.add("hidden");
+      } catch (error) {
+        liveAudioUnlock.classList.remove("hidden");
+        console.warn("配信音声の自動再生が拒否されました", error);
+      }
+    }
+    liveAudioUnlock.addEventListener("click", enableRemoteAudio);
+
+    async function connectLiveAudio(liveState) {
+      const sessionId = liveState?.sessionId;
+      if (!liveState?.active || !sessionId) {
+        await stopLiveAudioReceiver();
+        return;
+      }
+      liveRemoteAudio.volume = Math.max(0, Math.min(1, Number(liveState.volume ?? 1)));
+      if (liveAudioPc && liveAudioSessionId === sessionId) return;
+
+      await stopLiveAudioReceiver();
+      liveAudioSessionId = sessionId;
+      const sessionBase = `selectWord/rooms/${roomId}/liveAudio/session`;
+      liveAudioPc = new RTCPeerConnection(rtcConfig);
+
+      liveAudioPc.ontrack = event => {
+        const stream = event.streams?.[0] || new MediaStream([event.track]);
+        liveRemoteAudio.srcObject = stream;
+        enableRemoteAudio();
+      };
+      liveAudioPc.onicecandidate = async event => {
+        if (!event.candidate) return;
+        await push(ref(db, `${sessionBase}/displayCandidates`), event.candidate.toJSON());
+      };
+      liveAudioPc.onconnectionstatechange = () => {
+        const state = liveAudioPc?.connectionState;
+        if (state === "failed") showError("リアルタイム音声の接続に失敗しました。運営側で再接続してください。");
+      };
+
+      const controlCandidatesRef = ref(db, `${sessionBase}/controlCandidates`);
+      const unsubCandidates = onChildAdded(controlCandidatesRef, async snapshot => {
+        if (!liveAudioPc) return;
+        try { await liveAudioPc.addIceCandidate(snapshot.val()); }
+        catch (error) { console.warn("control ICE候補追加失敗", error); }
+      });
+      liveAudioUnsubscribers.push(unsubCandidates);
+
+      const offerRef = ref(db, `${sessionBase}/offer`);
+      const unsubOffer = onValue(offerRef, async snapshot => {
+        const offer = snapshot.val();
+        if (!offer || !liveAudioPc || liveAudioPc.currentRemoteDescription) return;
+        try {
+          await liveAudioPc.setRemoteDescription(offer);
+          const answer = await liveAudioPc.createAnswer();
+          await liveAudioPc.setLocalDescription(answer);
+          await set(ref(db, `${sessionBase}/answer`), { type: answer.type, sdp: answer.sdp });
+        } catch (error) {
+          console.error("リアルタイム音声の接続処理に失敗", error);
+          showError(`リアルタイム音声接続失敗：${error.message}`);
+        }
+      });
+      liveAudioUnsubscribers.push(unsubOffer);
+    }
+
+    onValue(liveAudioRef, snapshot => {
+      const liveState = snapshot.val() || {};
+      liveRemoteAudio.volume = Math.max(0, Math.min(1, Number(liveState.volume ?? 1)));
+      connectLiveAudio(liveState).catch(error => {
+        console.error(error);
+        showError(`リアルタイム音声エラー：${error.message}`);
+      });
     });
 
     onValue(roomRef, snapshot => {
