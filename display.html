@@ -1502,13 +1502,26 @@
       activeVideoPauseIndex = 0;
 
       try {
-        await playEffectSafe("incoming");
-        eventVideo.src = command.src || "video/event.mp4";
-        eventVideo.load();
-        videoOverlay.classList.add("active");
-        eventVideo.currentTime = 0;
-        await eventVideo.play();
-        await reportVideoPlayback("playing");
+  eventVideo.src = command.src || "video/event.mp4";
+  eventVideo.load();
+
+  eventVideo.playsInline = true;
+  eventVideo.setAttribute("playsinline", "");
+  eventVideo.setAttribute("webkit-playsinline", "");
+
+  videoOverlay.classList.add("active");
+  eventVideo.currentTime = 0;
+
+  // 動画を先に再生開始
+  const videoPlayPromise = eventVideo.play();
+
+  // 通信音は待たずに同時再生
+  playEffectSafe("incoming").catch(audioError => {
+    console.warn("通信音の再生に失敗しました", audioError);
+  });
+
+  await videoPlayPromise;
+  await reportVideoPlayback("playing");
 
         await new Promise((resolve, reject) => {
           eventVideo.addEventListener("ended", resolve, { once: true });
