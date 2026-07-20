@@ -877,6 +877,10 @@
     let lastResultId = "";
     let lastVideoCommandId = "";
     let lastStopVideoCommandId = "";
+    let lastVideoControlCommandId = "";
+    let activeVideoPausePoints = [];
+    let activeVideoPauseIndex = 0;
+    let activeVideoSessionId = "";
     let lastAudioTestCommandId = "";
     let lastCustomEffectCommandId = "";
     let isPlayingResult = false;
@@ -1456,9 +1460,46 @@
 
     deadScreen.addEventListener("pointerup", registerDeadScreenTap);
 
+    async function reportVideoPlayback(status, extra = {}) {
+      await update(roomRef, {
+        videoPlayback: {
+          status,
+          src: eventVideo.currentSrc || eventVideo.getAttribute("src") || "",
+          currentTime: Number(eventVideo.currentTime || 0),
+          pausePoints: activeVideoPausePoints,
+          nextPauseAt: activeVideoPausePoints[activeVideoPauseIndex] ?? null,
+          pauseIndex: activeVideoPauseIndex,
+          sessionId: activeVideoSessionId,
+          updatedAt: Date.now(),
+          ...extra
+        }
+      }).catch(console.error);
+    }
+
+    function handleVideoTimeUpdate() {
+      const pauseAt = activeVideoPausePoints[activeVideoPauseIndex];
+      if (!Number.isFinite(pauseAt) || pauseAt <= 0) return;
+      if (eventVideo.currentTime + 0.04 < pauseAt) return;
+
+      eventVideo.pause();
+      activeVideoPauseIndex += 1;
+      reportVideoPlayback("paused", {
+        reason: "auto",
+        pausedAt: pauseAt,
+        nextPauseAt: activeVideoPausePoints[activeVideoPauseIndex] ?? null
+      });
+    }
+
+    eventVideo.addEventListener("timeupdate", handleVideoTimeUpdate);
+
     async function playVideoCommand(command) {
       if (!command?.id || command.id === lastVideoCommandId) return;
       lastVideoCommandId = command.id;
+      activeVideoSessionId = command.id;
+      activeVideoPausePoints = Array.isArray(command.pausePoints)
+        ? [...new Set(command.pausePoints.map(Number).filter(value => Number.isFinite(value) && value > 0))].sort((a, b) => a - b)
+        : (Number.isFinite(Number(command.pauseAt)) && Number(command.pauseAt) > 0 ? [Number(command.pauseAt)] : []);
+      activeVideoPauseIndex = 0;
 
       try {
         await playEffectSafe("incoming");
@@ -1467,19 +1508,47 @@
         videoOverlay.classList.add("active");
         eventVideo.currentTime = 0;
         await eventVideo.play();
+        await reportVideoPlayback("playing");
 
-        await new Promise(resolve => {
+        await new Promise((resolve, reject) => {
           eventVideo.addEventListener("ended", resolve, { once: true });
-          eventVideo.addEventListener("error", resolve, { once: true });
+          eventVideo.addEventListener("error", () => reject(new Error("動画ファイルを読み込めません")), { once: true });
         });
+        await reportVideoPlayback("ended");
       } catch (error) {
         showError(`動画再生失敗：${error.message}`);
+        await reportVideoPlayback("error", { message: error.message });
       } finally {
         eventVideo.pause();
         eventVideo.removeAttribute("src");
         eventVideo.load();
         videoOverlay.classList.remove("active");
-        await update(roomRef, { videoCommand: null });
+        activeVideoPausePoints = [];
+        activeVideoPauseIndex = 0;
+        activeVideoSessionId = "";
+        await update(roomRef, { videoCommand: null, videoControlCommand: null });
+      }
+    }
+
+    async function controlVideoPlayback(command) {
+      if (!command?.id || command.id === lastVideoControlCommandId) return;
+      lastVideoControlCommandId = command.id;
+
+      try {
+        if (command.action === "pause") {
+          if (!eventVideo.src) return;
+          eventVideo.pause();
+          await reportVideoPlayback("paused", { reason: "manual" });
+        } else if (command.action === "resume") {
+          if (!eventVideo.src) return;
+          await eventVideo.play();
+          await reportVideoPlayback("playing");
+        }
+      } catch (error) {
+        showError(`動画操作失敗：${error.message}`);
+        await reportVideoPlayback("error", { message: error.message });
+      } finally {
+        await update(roomRef, { videoControlCommand: null }).catch(console.error);
       }
     }
 
@@ -1492,8 +1561,16 @@
       eventVideo.removeAttribute("src");
       eventVideo.load();
       videoOverlay.classList.remove("active");
+      activeVideoPausePoints = [];
+      activeVideoPauseIndex = 0;
+      activeVideoSessionId = "";
 
-      update(roomRef, { stopVideoCommand: null }).catch(console.error);
+      update(roomRef, {
+        stopVideoCommand: null,
+        videoCommand: null,
+        videoControlCommand: null,
+        videoPlayback: { status: "stopped", currentTime: 0, updatedAt: Date.now() }
+      }).catch(console.error);
     }
 
     async function runCustomEffect(command) {
@@ -1772,6 +1849,7 @@
       if (!timerInterval) timerInterval = setInterval(updateTimer, 250);
       if (state.result) playResult(state.result);
       if (state.videoCommand) playVideoCommand(state.videoCommand);
+      if (state.videoControlCommand) controlVideoPlayback(state.videoControlCommand);
       if (state.stopVideoCommand) stopVideoPlayback(state.stopVideoCommand);
       if (state.audioTestCommand) runAudioTest(state.audioTestCommand);
       if (state.customEffectCommand) runCustomEffect(state.customEffectCommand);
