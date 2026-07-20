@@ -894,6 +894,7 @@
     let deadScreenTapCount = 0;
     let deadScreenTapResetTimer = null;
     let secretVideoPlaying = false;
+    let videoUnlocked = false;
     const SECRET_TAP_COUNT = 10;
     const SECRET_TAP_TIMEOUT_MS = 5000;
     const SECRET_VIDEO_SRC = "video/seikai1.mp4";
@@ -1160,6 +1161,42 @@
       closeAudioSetup.disabled = !(audio.ctx?.state === "running");
     }
 
+    async function unlockVideoPlayback() {
+      if (videoUnlocked) return true;
+
+      try {
+        eventVideo.pause();
+        eventVideo.src = "video/event.mp4";
+        eventVideo.load();
+
+        eventVideo.playsInline = true;
+        eventVideo.setAttribute("playsinline", "");
+        eventVideo.setAttribute("webkit-playsinline", "");
+
+        // この関数は、表示端末でセットアップボタンを押した瞬間に実行する。
+        // Safariに同じvideo要素の再生操作を覚えさせるため、一度だけ無音再生する。
+        eventVideo.muted = true;
+        eventVideo.volume = 0;
+
+        await eventVideo.play();
+        eventVideo.pause();
+        eventVideo.currentTime = 0;
+
+        eventVideo.muted = false;
+        eventVideo.volume = 1;
+        videoUnlocked = true;
+        console.log("動画再生を有効化しました");
+        return true;
+      } catch (error) {
+        eventVideo.pause();
+        eventVideo.muted = false;
+        eventVideo.volume = 1;
+        videoUnlocked = false;
+        console.error("動画再生の有効化に失敗しました", error);
+        throw error;
+      }
+    }
+
     async function setupAudio(force = true) {
       clearError();
       setupAudioButton.disabled = true;
@@ -1168,6 +1205,7 @@
 
       try {
         await audio.unlock();
+        await unlockVideoPlayback();
         audio.setBgmVolume(requestedBgmVolume);
         audio.setEffectVolume(requestedEffectVolume);
         await audio.loadAll(force);
@@ -1508,6 +1546,8 @@
   eventVideo.playsInline = true;
   eventVideo.setAttribute("playsinline", "");
   eventVideo.setAttribute("webkit-playsinline", "");
+  eventVideo.muted = false;
+  eventVideo.volume = 1;
 
   videoOverlay.classList.add("active");
   eventVideo.currentTime = 0;
