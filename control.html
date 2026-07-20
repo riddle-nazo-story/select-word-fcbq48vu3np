@@ -145,13 +145,22 @@
       <option value="video/ending.mp4">ending.mp4</option>
     </select>
 
-    <div class="grid2" style="margin-top:12px">
-      <button id="playSelectedVideo" class="primary">選択した動画を再生</button>
-      <button id="stopVideo" class="danger">動画を停止</button>
+    <div style="margin-top:12px">
+      <label for="videoPauseAt">自動で一時停止する秒数（複数指定可）</label>
+      <input id="videoPauseAt" type="text" inputmode="decimal" autocomplete="off" placeholder="例：12.5, 28, 45.5">
+      <div class="current" style="margin-top:7px">半角カンマ・読点・空白で区切って、早い順に指定できます。</div>
     </div>
 
+    <div class="grid2" style="margin-top:12px">
+      <button id="playSelectedVideo" class="primary">選択した動画を最初から再生</button>
+      <button id="resumeVideo" class="primary">一時停止位置から再生</button>
+      <button id="pauseVideo">今の位置で一時停止</button>
+      <button id="stopVideo" class="danger">動画を終了</button>
+    </div>
+
+    <div id="videoPlaybackStatus" class="message">動画状態：停止中</div>
     <p class="note" style="margin-top:12px">
-      動画は <code>video</code> フォルダに配置してください。
+      動画は <code>video</code> フォルダに配置してください。指定した各秒数で順番に自動停止し、「一時停止位置から再生」を押すたびに次の停止位置まで進みます。
     </p>
   </section>
 
@@ -501,6 +510,15 @@ window.addEventListener("beforeunload", () => {
 
 onValue(roomRef,snapshot=>{
   state=snapshot.val()||{};
+  const videoStatusEl = document.getElementById("videoPlaybackStatus");
+  if (videoStatusEl) {
+    const playback = state.videoPlayback || {};
+    const labels = { loading:"読み込み中", playing:"再生中", paused:"一時停止中", ended:"再生終了", stopped:"停止中", error:"再生エラー" };
+    const timeText = Number.isFinite(Number(playback.currentTime)) ? `（${Number(playback.currentTime).toFixed(1)}秒）` : "";
+    const nextPauseText = Number.isFinite(Number(playback.nextPauseAt)) ? `｜次の自動停止：${Number(playback.nextPauseAt).toFixed(1)}秒` : "";
+    videoStatusEl.textContent = `動画状態：${labels[playback.status] || "停止中"}${timeText}${nextPauseText}`;
+    videoStatusEl.className = `message ${playback.status === "error" ? "ng" : ""}`;
+  }
   if(document.activeElement!==answerInput)answerInput.value=state.answer||"";
   requestPanel.classList.toggle("active",state.mode==="waiting");
   judgeSubmit.disabled=state.mode!=="waiting";
@@ -625,6 +643,9 @@ document.getElementById("resetGame").addEventListener("click",async()=>{
       remainingSeconds:GAME_SECONDS
     },
     videoCommand:null,
+    videoControlCommand:null,
+    stopVideoCommand:null,
+    videoPlayback:{status:"stopped",currentTime:0,updatedAt:Date.now()},
     clearRecord:null,
     result:null,
     requestAt:null,
@@ -961,10 +982,44 @@ wordInput.addEventListener("keydown",e=>{if(e.key==="Enter")submitJudgement()});
 
 document.getElementById("playSelectedVideo").addEventListener("click", async () => {
   const src = document.getElementById("videoSelect").value;
+  const rawPauseAt = document.getElementById("videoPauseAt").value.trim();
+  const pausePoints = [...new Set(
+    rawPauseAt
+      .split(/[\s,、，]+/)
+      .map(value => Number(value))
+      .filter(value => Number.isFinite(value) && value > 0)
+  )].sort((a, b) => a - b);
+
   await update(roomRef, {
     videoCommand: {
       id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
-      src
+      src,
+      pausePoints
+    },
+    videoPlayback: {
+      status: "loading",
+      src,
+      pausePoints,
+      nextPauseAt: pausePoints[0] ?? null,
+      updatedAt: Date.now()
+    }
+  });
+});
+
+document.getElementById("resumeVideo").addEventListener("click", async () => {
+  await update(roomRef, {
+    videoControlCommand: {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      action: "resume"
+    }
+  });
+});
+
+document.getElementById("pauseVideo").addEventListener("click", async () => {
+  await update(roomRef, {
+    videoControlCommand: {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      action: "pause"
     }
   });
 });
@@ -972,6 +1027,7 @@ document.getElementById("playSelectedVideo").addEventListener("click", async () 
 document.getElementById("stopVideo").addEventListener("click", async () => {
   await update(roomRef, {
     videoCommand: null,
+    videoControlCommand: null,
     stopVideoCommand: {
       id: `${Date.now()}-${Math.random().toString(36).slice(2)}`
     }
