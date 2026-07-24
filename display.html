@@ -23,8 +23,8 @@
       --bg: #050505;
       --fg: #f5f5f5;
       --muted: #8b8b8b;
-      --yellow: #ffd400;
-      --yellow-dark: #9e7d00;
+      --yellow: #21c55d;
+      --yellow-dark: #0f7a37;
       --danger: #ff2d2d;
     }
 
@@ -194,20 +194,20 @@
       position: relative;
       width: 72%;
       aspect-ratio: 1;
-      border: 2px solid #ffe86e;
+      border: 2px solid #7dffa8;
       border-radius: 50%;
       background:
-        radial-gradient(circle at 36% 28%, #fff08b 0 5%, #ffd400 28%, #e7ad00 72%, #8b6500 100%);
-      color: #171300;
+        radial-gradient(circle at 36% 28%, #b9ffd0 0 5%, #21c55d 28%, #159447 72%, #075c28 100%);
+      color: #04170b;
       font-size: clamp(30px, 5.4vw, 58px);
       font-weight: 900;
       letter-spacing: .12em;
       cursor: pointer;
       box-shadow:
-        0 13px 0 #735600,
+        0 13px 0 #075c28,
         0 18px 28px rgba(0,0,0,.6),
         inset 0 3px 8px rgba(255,255,255,.72),
-        inset 0 -10px 18px rgba(109,70,0,.25);
+        inset 0 -10px 18px rgba(0,70,28,.28);
       transition: transform .08s ease, box-shadow .08s ease, filter .15s;
       touch-action: manipulation;
     }
@@ -229,7 +229,7 @@
     .judge-button.pressed {
       transform: translateY(9px);
       box-shadow:
-        0 4px 0 #735600,
+        0 4px 0 #075c28,
         0 9px 15px rgba(0,0,0,.55),
         inset 0 3px 8px rgba(255,255,255,.5);
     }
@@ -238,7 +238,7 @@
       cursor: default;
       filter: brightness(.42) saturate(.45);
       transform: translateY(9px);
-      box-shadow: 0 4px 0 #453500, 0 9px 15px rgba(0,0,0,.55);
+      box-shadow: 0 4px 0 #063c1d, 0 9px 15px rgba(0,0,0,.55);
     }
 
     .manual-screen {
@@ -1164,37 +1164,41 @@
     async function unlockVideoPlayback() {
       if (videoUnlocked) return true;
 
+      // Safariでは動画の事前再生が拒否される場合がある。
+      // 音声セットアップ全体を止めないよう、動画アンロックは「できれば実行」にする。
       try {
         eventVideo.pause();
         eventVideo.src = "video/event.mp4";
         eventVideo.load();
-
         eventVideo.playsInline = true;
         eventVideo.setAttribute("playsinline", "");
         eventVideo.setAttribute("webkit-playsinline", "");
-
-        // この関数は、表示端末でセットアップボタンを押した瞬間に実行する。
-        // Safariに同じvideo要素の再生操作を覚えさせるため、一度だけ無音再生する。
         eventVideo.muted = true;
         eventVideo.volume = 0;
 
-        await eventVideo.play();
+        const playPromise = eventVideo.play();
+        await Promise.race([
+          playPromise,
+          new Promise((_, reject) => setTimeout(() => reject(new Error("動画アンロックがタイムアウトしました")), 2500))
+        ]);
+
         eventVideo.pause();
         eventVideo.currentTime = 0;
-
-        eventVideo.muted = false;
-        eventVideo.volume = 1;
         videoUnlocked = true;
         console.log("動画再生を有効化しました");
-        return true;
       } catch (error) {
+        // ここで失敗しても、音源チェック自体は続行する。
+        console.warn("動画の事前アンロックは省略します", error);
+        videoUnlocked = false;
+      } finally {
         eventVideo.pause();
+        eventVideo.removeAttribute("src");
+        eventVideo.load();
         eventVideo.muted = false;
         eventVideo.volume = 1;
-        videoUnlocked = false;
-        console.error("動画再生の有効化に失敗しました", error);
-        throw error;
       }
+
+      return videoUnlocked;
     }
 
     async function setupAudio(force = true) {
@@ -1205,6 +1209,8 @@
 
       try {
         await audio.unlock();
+        // ボタンを押した操作の中で、まず短い内蔵音を鳴らして許可を確定する。
+        await audio.playTone();
         await unlockVideoPlayback();
         audio.setBgmVolume(requestedBgmVolume);
         audio.setEffectVolume(requestedEffectVolume);
