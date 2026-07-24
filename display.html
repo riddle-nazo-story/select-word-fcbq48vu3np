@@ -17,6 +17,7 @@
   <link rel="icon" type="image/png" sizes="512x512" href="./icons/icon-512.png">
 
   <title>SELECT WORD | DISPLAY</title>
+  <!-- 通信音の終了を待たず、動画と同時に再生する版 -->
   <style>
     :root {
       color-scheme: dark;
@@ -1456,8 +1457,10 @@
         // 通信音の終了を待つと、iPhone/iPadで自動再生扱いになり拒否されることがある。
         const videoPlayPromise = eventVideo.play();
 
-        // Safariで動画再生と競合する可能性があるため、通信音は再生しません。
-        // playEffectSafe("incoming");
+        // 通信音は待たずに同時再生。失敗しても動画は継続する。
+        playEffectSafe("incoming").catch(audioError => {
+          console.warn("隠し通信音の再生に失敗しました", audioError);
+        });
 
         await videoPlayPromise;
 
@@ -1559,8 +1562,10 @@
   // 動画を先に再生開始
   const videoPlayPromise = eventVideo.play();
 
-  // Safariで動画再生と競合する可能性があるため、通信音は再生しません。
-  // playEffectSafe("incoming");
+  // 通信音は待たずに同時再生
+  playEffectSafe("incoming").catch(audioError => {
+    console.warn("通信音の再生に失敗しました", audioError);
+  });
 
   await videoPlayPromise;
   await reportVideoPlayback("playing");
@@ -1571,7 +1576,7 @@
         });
         await reportVideoPlayback("ended");
       } catch (error) {
-        showError(`動画再生失敗：${error.name || "Error"} / ${error.message || "詳細不明"}`);
+        showError(`動画再生失敗：${error.message}`);
         await reportVideoPlayback("error", { message: error.message });
       } finally {
         eventVideo.pause();
